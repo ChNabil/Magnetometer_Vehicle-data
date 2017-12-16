@@ -6,8 +6,8 @@ Car will drive past couple of magnetometers. Interested in finding following inf
 3. Position of the engine of the vehicle
 4. Location of the vehicle when other calculations are done
 
-Microcontroller:
-Sensor:
+Microcontroller:  
+Sensor:  
 
-Try to eliminate data from vehicles coming from opposite lane
+Try to eliminate data from vehicles coming from opposite lane  
 Try to eliminate data from vehicles in another lane going in same direction
