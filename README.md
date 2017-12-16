@@ -9,5 +9,5 @@ Car will drive past couple of magnetometers. Interested in finding following inf
 Microcontroller:
 Sensor:
 
-*Try to eliminate data from vehicles coming from opposite lane
-*Try to eliminate data from vehicles in another lane going in same direction
+Try to eliminate data from vehicles coming from opposite lane
+Try to eliminate data from vehicles in another lane going in same direction
