@@ -3,7 +3,7 @@ Collection of vehicle data using two magnetometers and processing the data to fi
 Car will drive past couple of magnetometers. Interested in finding following information about the vehicle
 1. Speed of the vehicle
 2. Length of the vehicle
-3. Position of the engine of the vehicle
+3. Position of the engine in the vehicle
 4. Location of the vehicle when other calculations are done
 
 Microcontroller:  
