@@ -7,7 +7,7 @@ Car will drive past couple of magnetometers and an ultrasonic Sensor. Interested
 4. How far away is the vehicle from the curb of the road
 5. Location of the vehicle when other calculations are done
 
-Microcontroller: msp430f5529/msp430g2553  
+Microcontroller: msp430f5529  
 Ultrasonic Sensor: Maxbotix LV-EZ1  
 Magnetometer: MAG3110  
 
