@@ -1,6 +1,7 @@
-#include<msp430f5529.h>
+#include <msp430f5529.h>
+//#include <math.h>
 
-//void Clock_setup(void);
+void Clock_setup();   // using default SMCLK ~1MHz for now
 void I2C_setup_s1();  // I2C setup for sensor 1
 void I2C_setup_s2();  // I2C setup for sensor 2
 void MAG3110_setup_s1(void);  // Sensor 1 configuration setup
@@ -9,6 +10,7 @@ void I2C_receive_s1();  // receive 6 bytes from sensor 1
 void I2C_receive_s2();  // receive 6 bytes from sensor 2
 void I2C_transmit_s1(unsigned char NoOfBytes,unsigned char *transmit_data);  // transmit data to sensor 1
 void I2C_transmit_s2(unsigned char NoOfBytes,unsigned char *transmit_data);  // transmit data to sensor 2
+void UART_setup();
 
 unsigned char TXConfigData[4]={0x10,0x01,0x11,0x80};  // same config for both sensors
 unsigned char RegAddData[1]={0x1};  // same address for data in both sensors
@@ -18,6 +20,8 @@ int z_s1; // z value from sensor 1
 int x_s2; // x value from sensor 2
 int y_s2; // y value from sensor 2
 int z_s2; // z value from sensor 2
+int mag_s1;
+int mag_s2;
 volatile unsigned char RXData_s1[6];  // received 6 bytes from sensor 1
 volatile unsigned char RXData_s2[6];  // received 6 bytes from sensor 2
 unsigned char *PRXData_s1; // pointer for sensor 1 data
@@ -25,29 +29,58 @@ unsigned char *PRXData_s2; // pointer for sensor 2 data
 unsigned char RXByteCtr;  // same for both sensors
 unsigned char TXByteCtr;  // same for both sensors
 unsigned char *TI_transmit_field; // same for both sensors
+char UART_byte; // number of byte to be sent
+char UART_sensor_flag;  // which sensor is sending data via uart
 
 void main(){
   WDTCTL = WDTPW + WDTHOLD;
+  P2DIR &= ~BIT5; // will be used to check if new magnetmtr data are available
+  //Clock_setup();
   I2C_setup_s1();
-  I2C_setup_s2();
+  //I2C_setup_s2();
   _EINT();
   MAG3110_setup_s1();
-  MAG3110_setup_s2();
+  //MAG3110_setup_s2();
+  UART_setup();
   while(1){
-   I2C_transmit_s1(1,RegAddData);
-   I2C_receive_s1();
-   I2C_transmit_s2(1,RegAddData);
-   I2C_receive_s2();
-    x_s1 = (RXData_s1[0] << 8) | RXData_s1[1];
-    y_s1 = (RXData_s1[2] << 8) | RXData_s1[3];
-    z_s1 = (RXData_s1[4] << 8) | RXData_s1[5];
-    x_s2 = (RXData_s2[0] << 8) | RXData_s2[1];
-    y_s2 = (RXData_s2[2] << 8) | RXData_s2[3];
-    z_s2 = (RXData_s2[4] << 8) | RXData_s2[5];
+    if(P2IN & BIT5){  // checking magntmtr int pin, so all 3 sensors data will have same sampling fr(80Hz)
+      I2C_transmit_s1(1,RegAddData);
+      I2C_receive_s1();
+      //I2C_transmit_s2(1,RegAddData);
+      //I2C_receive_s2();
+      x_s1 = (RXData_s1[0] << 8) | RXData_s1[1];
+      y_s1 = (RXData_s1[2] << 8) | RXData_s1[3];
+      z_s1 = (RXData_s1[4] << 8) | RXData_s1[5];
+      x_s2 = (RXData_s2[0] << 8) | RXData_s2[1];
+      y_s2 = (RXData_s2[2] << 8) | RXData_s2[3];
+      z_s2 = (RXData_s2[4] << 8) | RXData_s2[5];
+      // will do this in data processing, taking raw data (x,y,z) for now
+      // mag_s1 = sqrt(powf(x_s1,2)+powf(y_s1,2)+powf(z_s1,2));  // calculate magnitude
+      // mag_s1 = mag_s1*2000/65536; // convert magnitude into uT
+      // mag_s2 = sqrt(powf(x_s2,2)+powf(y_s2,2)+powf(z_s2,2));  // calculate magnitude
+      // mag_s2 = mag_s2*2000/65536; // convert magnitude into uT
+      UART_sensor_flag = 1;  // sensor 1 is sending data
+      UART_byte = 0;  // for first sensor data
+      UCA1IE |= UCTXIE; // Enable USCI_A1 TX interrupt
+      LPM0;
+      UART_sensor_flag = 2;  // sensor 2 is sending data
+      UART_byte = 0;  // for second sensor data
+      UCA1IE |= UCTXIE; // Enable USCI_A1 TX interrupt
+      LPM0;
+      // UART_sensor_flag = 3;  // sensor 3 (ultrasonic) is sending data
+      // UART_byte = 0;  // for ultrasonic sensor data
+      // UCA1IE |= UCTXIE; // Enable USCI_A1 TX interrupt
+    }
   }
-
-
 }
+
+void Clock_setup(){
+    P2DIR |= BIT2;    // check smclk, 1MHz default
+    P2SEL |= BIT2;    // check smclk, 1MHz default
+    P1DIR |= BIT0;    // check aclk, 32.8KHz default
+    P1SEL |= BIT0;    // check aclk, 32.8KHz default
+}
+
 
 void I2C_setup_s1() {
   P3SEL |= 0x03;                            //  P3.0(UCB0_SDA), P3.1(UCB0_SCL)
@@ -214,6 +247,59 @@ void __attribute__ ((interrupt(USCI_B1_VECTOR))) USCI_B1_ISR (void)
       LPM0_EXIT;                            // Exit LPM0
     }
   break;
+  default: break;
+  }
+}
+
+
+void UART_setup(){
+  P4SEL |= BIT5+BIT4; // UCA1TXD and UCA1RXD
+  UCA1CTL1 |= UCSWRST;  // reset enabled
+  UCA1CTL1 |= UCSSEL_2; // SMCLK
+  UCA1BR0 = 9;  // 1MHz/9 = 115200
+  UCA1BR1 = 0;  // 1MHz/9 = 115200
+  UCA1CTL1 &= ~UCSWRST; // reset disabled
+}
+
+
+#if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
+#pragma vector=USCI_A1_VECTOR
+__interrupt void USCI_A1_ISR(void)
+#elif defined(__GNUC__)
+void __attribute__ ((interrupt(USCI_A1_VECTOR))) USCI_A1_ISR (void)
+#else
+#error Compiler not supported!
+#endif
+{
+  switch(__even_in_range(UCA1IV,4))
+  {
+  case 0:break;
+  case 2:break;
+  case 4:
+    if (UART_sensor_flag == 1){
+      UCA1TXBUF = RXData_s1[UART_byte];
+      UART_byte++;
+      if(UART_byte == 6)
+      {
+        UCA1IE &= ~UCTXIE;
+        LPM0_EXIT;
+      }
+    }
+    else if (UART_sensor_flag == 2){
+      UCA1TXBUF = RXData_s2[UART_byte];
+      UART_byte++;
+      if(UART_byte == 6)
+      {
+        UCA1IE &= ~UCTXIE;
+        LPM0_EXIT;
+      }
+    }
+    else{
+      //UCA1TXBUF = ultrasonic data
+      UCA1IE &= ~UCTXIE;
+      LPM0_EXIT;
+    }
+  break;                             // Vector 4 - TXIFG
   default: break;
   }
 }
