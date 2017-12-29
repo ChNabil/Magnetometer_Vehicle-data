@@ -31,6 +31,7 @@ unsigned char TXByteCtr;  // same for both sensors
 unsigned char *TI_transmit_field; // same for both sensors
 char UART_byte; // number of byte to be sent
 char UART_sensor_flag;  // which sensor is sending data via uart
+char three_digit_flag;  // sending 3 digits of each bytes separately
 
 void main(){
   WDTCTL = WDTPW + WDTHOLD;
@@ -60,11 +61,13 @@ void main(){
       // mag_s2 = sqrt(powf(x_s2,2)+powf(y_s2,2)+powf(z_s2,2));  // calculate magnitude
       // mag_s2 = mag_s2*2000/65536; // convert magnitude into uT
       UART_sensor_flag = 1;  // sensor 1 is sending data
-      UART_byte = 0;  // for first sensor data
+      UART_byte = 0;  // for first datum from sensor 1
+      three_digit_flag = 1; // sending first digit
       UCA1IE |= UCTXIE; // Enable USCI_A1 TX interrupt
       LPM0;
       UART_sensor_flag = 2;  // sensor 2 is sending data
-      UART_byte = 0;  // for second sensor data
+      UART_byte = 0;  // for first datum from sensor 2
+      three_digit_flag = 1; // sending first digit
       UCA1IE |= UCTXIE; // Enable USCI_A1 TX interrupt
       LPM0;
       // UART_sensor_flag = 3;  // sensor 3 (ultrasonic) is sending data
@@ -277,8 +280,19 @@ void __attribute__ ((interrupt(USCI_A1_VECTOR))) USCI_A1_ISR (void)
   case 2:break;
   case 4:
     if (UART_sensor_flag == 1){
-      UCA1TXBUF = RXData_s1[UART_byte];
-      UART_byte++;
+      if (three_digit_flag == 1){
+        UCA1TXBUF = ((int) (RXData_s1[UART_byte]/100))+48;
+        three_digit_flag++;
+      }
+        else if (three_digit_flag == 2){
+          UCA1TXBUF = ((RXData_s1[UART_byte] - (((int) (RXData_s1[UART_byte]/100))*100))/10)+48;
+          three_digit_flag++;
+        }
+        else if (three_digit_flag == 3){
+          UCA1TXBUF = ((RXData_s1[UART_byte] - (((int) (RXData_s1[UART_byte]/100))*100))%10)+48;
+          three_digit_flag = 1;
+          UART_byte++;
+        }
       if(UART_byte == 6)
       {
         UCA1IE &= ~UCTXIE;
@@ -286,10 +300,29 @@ void __attribute__ ((interrupt(USCI_A1_VECTOR))) USCI_A1_ISR (void)
       }
     }
     else if (UART_sensor_flag == 2){
-      UCA1TXBUF = RXData_s2[UART_byte];
-      UART_byte++;
+      if (three_digit_flag == 1){
+        UCA1TXBUF = ((int) (RXData_s2[UART_byte]/100))+48;
+        three_digit_flag++;
+      }
+        else if (three_digit_flag == 2){
+          UCA1TXBUF = (RXData_s2[UART_byte] - ((((int) (RXData_s2[UART_byte]/100))*100))/10)+48;
+          three_digit_flag++;
+        }
+        else if (three_digit_flag == 3){
+          UCA1TXBUF = ((RXData_s2[UART_byte] - (((int) (RXData_s2[UART_byte]/100))*100))%10)+48;
+          three_digit_flag = 1;
+          UART_byte++;
+        }
       if(UART_byte == 6)
       {
+        three_digit_flag = 0; // will remove once newline is moved after ultrasonic data
+        UCA1TXBUF = '\n'; // newline, will be moved after ultrasonic sensor data when ready
+        UART_byte++;
+      }
+      else if(UART_byte == 7)
+      {
+        three_digit_flag = 1;
+        UCA1TXBUF = '\r'; // start point of the line, will be moved after ultrasonic sensor data when ready
         UCA1IE &= ~UCTXIE;
         LPM0_EXIT;
       }
