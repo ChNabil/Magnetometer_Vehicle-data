@@ -10,6 +10,7 @@ void I2C_receive_s1();  // receive 6 bytes from sensor 1
 void I2C_receive_s2();  // receive 6 bytes from sensor 2
 void I2C_transmit_s1(unsigned char NoOfBytes,unsigned char *transmit_data);  // transmit data to sensor 1
 void I2C_transmit_s2(unsigned char NoOfBytes,unsigned char *transmit_data);  // transmit data to sensor 2
+void ADC_setup();
 void UART_setup();
 
 unsigned char TXConfigData[4]={0x10,0x01,0x11,0x80};  // same config for both sensors
@@ -24,6 +25,8 @@ int mag_s1;
 int mag_s2;
 volatile unsigned char RXData_s1[6];  // received 6 bytes from sensor 1
 volatile unsigned char RXData_s2[6];  // received 6 bytes from sensor 2
+volatile unsigned int distance;  // distance in cm
+int temp;
 unsigned char *PRXData_s1; // pointer for sensor 1 data
 unsigned char *PRXData_s2; // pointer for sensor 2 data
 unsigned char RXByteCtr;  // same for both sensors
@@ -32,6 +35,7 @@ unsigned char *TI_transmit_field; // same for both sensors
 char UART_byte; // number of byte to be sent
 char UART_sensor_flag;  // which sensor is sending data via uart
 char three_digit_flag;  // sending 3 digits of each bytes separately
+char i; // for each 5 magnetometer data, 1 distance will be measured. cause magnetometer data fr is 80Hz, ultrasonic data fr 20Hz
 
 void main(){
   WDTCTL = WDTPW + WDTHOLD;
@@ -42,19 +46,27 @@ void main(){
   _EINT();
   MAG3110_setup_s1();
   //MAG3110_setup_s2();
+  ADC_setup();
   UART_setup();
+  i = 0;
   while(1){
     if(P2IN & BIT5){  // checking magntmtr int pin, so all 3 sensors data will have same sampling fr(80Hz)
       I2C_transmit_s1(1,RegAddData);
       I2C_receive_s1();
       //I2C_transmit_s2(1,RegAddData);
       //I2C_receive_s2();
-      x_s1 = (RXData_s1[0] << 8) | RXData_s1[1];
-      y_s1 = (RXData_s1[2] << 8) | RXData_s1[3];
-      z_s1 = (RXData_s1[4] << 8) | RXData_s1[5];
-      x_s2 = (RXData_s2[0] << 8) | RXData_s2[1];
-      y_s2 = (RXData_s2[2] << 8) | RXData_s2[3];
-      z_s2 = (RXData_s2[4] << 8) | RXData_s2[5];
+      i++;
+      if (i==5){
+          ADC12IE = 0x01;   // enable adc interrupt for channel 0
+          LPM0;
+          i = 0;
+      }
+//      x_s1 = (RXData_s1[0] << 8) | RXData_s1[1];
+//      y_s1 = (RXData_s1[2] << 8) | RXData_s1[3];
+//      z_s1 = (RXData_s1[4] << 8) | RXData_s1[5];
+//      x_s2 = (RXData_s2[0] << 8) | RXData_s2[1];
+//      y_s2 = (RXData_s2[2] << 8) | RXData_s2[3];
+//      z_s2 = (RXData_s2[4] << 8) | RXData_s2[5];
       // will do this in data processing, taking raw data (x,y,z) for now
       // mag_s1 = sqrt(powf(x_s1,2)+powf(y_s1,2)+powf(z_s1,2));  // calculate magnitude
       // mag_s1 = mag_s1*2000/65536; // convert magnitude into uT
@@ -70,9 +82,10 @@ void main(){
       three_digit_flag = 1; // sending first digit
       UCA1IE |= UCTXIE; // Enable USCI_A1 TX interrupt
       LPM0;
-      // UART_sensor_flag = 3;  // sensor 3 (ultrasonic) is sending data
-      // UART_byte = 0;  // for ultrasonic sensor data
-      // UCA1IE |= UCTXIE; // Enable USCI_A1 TX interrupt
+      UART_sensor_flag = 3;  // sensor 3 (ultrasonic) is sending data
+      three_digit_flag = 1; // sending first digit
+      UCA1IE |= UCTXIE; // Enable USCI_A1 TX interrupt
+      LPM0;
     }
   }
 }
@@ -254,6 +267,58 @@ void __attribute__ ((interrupt(USCI_B1_VECTOR))) USCI_B1_ISR (void)
   }
 }
 
+// Ref voltage is AVCC = 3.3v, range of sensor is 648cm, 648/2048=0.316
+void ADC_setup(){
+    P6SEL |= 0x01;                            // Enable A/D channel A0
+//    REFCTL0 = REFMSTR + REFVSEL_0 + REFON;
+    ADC12CTL0 = ADC12ON+ADC12SHT0_8+ADC12MSC;   // Turn on ADC12, set sampling time
+    ADC12CTL1 = ADC12SSEL_3+ADC12SHP+ADC12CONSEQ_2;       // Use sampling timer, set mode
+//    ADC12IE = 0x01;                           // Enable ADC12IFG.0
+//    ADC12MCTL0 = ADC12SREF_1;
+      ADC12CTL0 |= ADC12ENC;                    // Enable conversions
+      ADC12CTL0 |= ADC12SC;                     // Start conversion
+}
+
+
+#if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
+#pragma vector=ADC12_VECTOR
+__interrupt void ADC12ISR (void)
+#elif defined(__GNUC__)
+void __attribute__ ((interrupt(ADC12_VECTOR))) ADC12ISR (void)
+#else
+#error Compiler not supported!
+#endif
+{
+  switch(__even_in_range(ADC12IV,34))
+  {
+  case  0: break;                           // Vector  0:  No interrupt
+  case  2: break;                           // Vector  2:  ADC overflow
+  case  4: break;                           // Vector  4:  ADC timing overflow
+  case  6:                                  // Vector  6:  ADC12IFG0
+    distance = ADC12MEM0;             // Move results
+    distance = distance *0.316;   // convert into cm
+    ADC12IE = 0x00; // disable interrupt for adc channel 0
+    LPM0_EXIT;
+    break;
+  case  8: break;                           // Vector  8:  ADC12IFG1
+  case 10: break;                           // Vector 10:  ADC12IFG2
+  case 12: break;                           // Vector 12:  ADC12IFG3
+  case 14: break;                           // Vector 14:  ADC12IFG4
+  case 16: break;                           // Vector 16:  ADC12IFG5
+  case 18: break;                           // Vector 18:  ADC12IFG6
+  case 20: break;                           // Vector 20:  ADC12IFG7
+  case 22: break;                           // Vector 22:  ADC12IFG8
+  case 24: break;                           // Vector 24:  ADC12IFG9
+  case 26: break;                           // Vector 26:  ADC12IFG10
+  case 28: break;                           // Vector 28:  ADC12IFG11
+  case 30: break;                           // Vector 30:  ADC12IFG12
+  case 32: break;                           // Vector 32:  ADC12IFG13
+  case 34: break;                           // Vector 34:  ADC12IFG14
+  default: break;
+  }
+}
+
+
 
 void UART_setup(){
   P4SEL |= BIT5+BIT4; // UCA1TXD and UCA1RXD
@@ -315,22 +380,35 @@ void __attribute__ ((interrupt(USCI_A1_VECTOR))) USCI_A1_ISR (void)
         }
       if(UART_byte == 6)
       {
-        three_digit_flag = 0; // will remove once newline is moved after ultrasonic data
-        UCA1TXBUF = '\n'; // newline, will be moved after ultrasonic sensor data when ready
-        UART_byte++;
-      }
-      else if(UART_byte == 7)
-      {
-        three_digit_flag = 1;
-        UCA1TXBUF = '\r'; // start point of the line, will be moved after ultrasonic sensor data when ready
-        UCA1IE &= ~UCTXIE;
-        LPM0_EXIT;
+          UCA1IE &= ~UCTXIE;
+          LPM0_EXIT;
       }
     }
-    else{
-      //UCA1TXBUF = ultrasonic data
-      UCA1IE &= ~UCTXIE;
-      LPM0_EXIT;
+    else if (UART_sensor_flag == 3){
+        if (three_digit_flag == 1){
+           UCA1TXBUF = ((int) (distance/100))+48;
+           three_digit_flag++;
+         }
+           else if (three_digit_flag == 2){
+               temp = ((int) (distance/100))*100;
+               temp = (distance - temp)/10;
+               UCA1TXBUF = temp +48;
+//             UCA1TXBUF = (distance - ((((int) (distance/100))*100))/10)+48;
+             three_digit_flag++;
+           }
+           else if (three_digit_flag == 3){
+             UCA1TXBUF = ((distance - (((int) (distance/100))*100))%10)+48;
+             three_digit_flag++;
+           }
+           else if (three_digit_flag == 4){
+               UCA1TXBUF = '\n'; // newline
+               three_digit_flag++;
+               }
+           else if (three_digit_flag == 5){
+               UCA1TXBUF = '\r'; // starting position of newline
+               UCA1IE &= ~UCTXIE;
+               LPM0_EXIT;
+               }
     }
   break;                             // Vector 4 - TXIFG
   default: break;
