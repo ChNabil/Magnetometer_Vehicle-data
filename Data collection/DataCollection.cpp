@@ -42,10 +42,10 @@ void main(){
   P2DIR &= ~BIT5; // will be used to check if new magnetmtr data are available
   //Clock_setup();
   I2C_setup_s1();
-  //I2C_setup_s2();
+  I2C_setup_s2();
   _EINT();
   MAG3110_setup_s1();
-  //MAG3110_setup_s2();
+  MAG3110_setup_s2();
   ADC_setup();
   UART_setup();
   i = 0;
@@ -53,8 +53,8 @@ void main(){
     if(P2IN & BIT5){  // checking magntmtr int pin, so all 3 sensors data will have same sampling fr(80Hz)
       I2C_transmit_s1(1,RegAddData);
       I2C_receive_s1();
-      //I2C_transmit_s2(1,RegAddData);
-      //I2C_receive_s2();
+      I2C_transmit_s2(1,RegAddData);
+      I2C_receive_s2();
       i++;
       if (i==5){
           ADC12IE = 0x01;   // enable adc interrupt for channel 0
