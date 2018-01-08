@@ -370,7 +370,10 @@ void __attribute__ ((interrupt(USCI_A1_VECTOR))) USCI_A1_ISR (void)
         three_digit_flag++;
       }
         else if (three_digit_flag == 2){
-          UCA1TXBUF = (RXData_s2[UART_byte] - ((((int) (RXData_s2[UART_byte]/100))*100))/10)+48;
+          temp = ((int) (RXData_s2[UART_byte]/100))*100;
+          temp = (RXData_s2[UART_byte] - temp)/10;
+          UCA1TXBUF = temp +48;
+          //UCA1TXBUF = (RXData_s2[UART_byte] - ((((int) (RXData_s2[UART_byte]/100))*100))/10)+48;
           three_digit_flag++;
         }
         else if (three_digit_flag == 3){
