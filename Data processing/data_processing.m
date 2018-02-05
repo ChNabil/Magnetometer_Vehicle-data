@@ -12,7 +12,7 @@ z2 = xlsread('Book1',2,'F1:F2581');
 z2 = typecast(uint16(z2),'int16');
 fs = 61.5;  % sampling frequency
 dis_snsrs = .055; % distance between 2 sensors in m
-distance = xlsread('Book1',2,'G1:G2581');
+distance = xlsread('Book1',2,'G1:G2581'); % in cm
 x1 = double(x1);  % needs to be double before squaring, or exceeds limit
 y1 = double(y1);
 z1 = double(z1);
@@ -25,12 +25,23 @@ mag2 = sqrt(x2.^2+y2.^2);
 mag2 = mag2*2000/65536;
 %mag2 = -mag2;   % because 2 sensors are positioned in opposite way
 %not needed anymore, changed the position of the second sensor
+t=1/fs:1/fs:(size(mag1)/fs); % converting sample number to sec, for plotting
+figure(1)
 subplot(311)
-plot(mag1)
+plot(t,mag1)
+%xlabel('Time (s)')
+ylabel('Mag. field (uT)')
+legend('Magnetometer 1')
 subplot(312)
-plot(mag2)
+plot(t,mag2)
+%xlabel('Time (s)')
+ylabel('Mag. field (uT)')
+legend('Magnetometer 2')
 subplot(313)
-plot(distance)
+plot(t,distance)
+xlabel('Time (s)')
+ylabel('Distance (cm)')
+legend('Ultrasonic sensor')
 
 %calculate speed and length of the vehicle
 [cor, lag] = xcorr((mag1-mean(mag1)),(mag2-mean(mag2)));
