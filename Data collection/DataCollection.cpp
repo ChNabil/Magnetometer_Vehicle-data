@@ -15,14 +15,14 @@ void UART_setup();
 
 unsigned char TXConfigData[4]={0x10,0x01,0x11,0x80};  // same config for both sensors
 unsigned char RegAddData[1]={0x1};  // same address for data in both sensors
-int x_s1; // x value from sensor 1
-int y_s1; // y value from sensor 1
-int z_s1; // z value from sensor 1
-int x_s2; // x value from sensor 2
-int y_s2; // y value from sensor 2
-int z_s2; // z value from sensor 2
-int mag_s1;
-int mag_s2;
+//int x_s1; // x value from sensor 1
+//int y_s1; // y value from sensor 1
+//int z_s1; // z value from sensor 1
+//int x_s2; // x value from sensor 2
+//int y_s2; // y value from sensor 2
+//int z_s2; // z value from sensor 2
+//int mag_s1;
+//int mag_s2;
 volatile unsigned char RXData_s1[6];  // received 6 bytes from sensor 1
 volatile unsigned char RXData_s2[6];  // received 6 bytes from sensor 2
 volatile unsigned int distance;  // distance in cm
@@ -60,6 +60,8 @@ void main(){
           ADC12IE = 0x01;   // enable adc interrupt for channel 0
           LPM0;
           i = 0;
+          if (distance > 648)
+              distance = 0; // range of the ultrasonic sensor is 648cm
       }
 //      x_s1 = (RXData_s1[0] << 8) | RXData_s1[1];
 //      y_s1 = (RXData_s1[2] << 8) | RXData_s1[3];
