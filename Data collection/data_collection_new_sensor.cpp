@@ -18,36 +18,35 @@ unsigned char TXByteCtr;  // same for both sensors
 unsigned char *TI_transmit_field; // same for both sensors
 char UART_byte; // number of byte to be sent
 char UART_sensor_flag;  // which sensor is sending data via uart
-char j; // for each 100 magnetometer data, 1 distance will be measured. cause magnetometer data fr is 2000Hz, ultrasonic data fr 20Hz
+char j,j1; // for each 100 magnetometer data, 1 distance will be measured. cause magnetometer data fr is 2000Hz, ultrasonic data fr 20Hz
 int sensor_select; // received data from which sensor
 volatile unsigned int i;
+volatile unsigned int a,b,c,d,e,f,g,h,k1,k2;  // for debugging
 
 void main()
 {
   WDTCTL = WDTPW + WDTHOLD;
   _EINT();
-  // clock_setup();
+  clock_setup();
   spi_setup();
-  //ADC_setup();
+  ADC_setup();
   UART_setup();
   j = 0;
+//  P8DIR |= BIT1;    // for debugging
+
   while(1)
   {
       spi_com1();
-      //spi_com2();
-      RXData_s2[0] = 1;
-      RXData_s2[1] = 2;
-      RXData_s2[2] = 3;
-      RXData_s2[3] = 4;
-      RXData_s2[4] = 5;
-      RXData_s2[5] = 6;
-      distance = 85;
+      spi_com2();
+//      distance = 85;
       j++;
-//      if (j==100){
-//                ADC12IE = 0x01;   // enable adc interrupt for channel 0
-//                LPM0;
-//                j = 0;
-//            }
+//      P8OUT ^= BIT1;    // for debugging
+      if (j==12){
+                ADC12IE = 0x01;   // enable adc interrupt for channel 0
+                LPM0;
+                j = 0;
+            }
+//      a=TA0R;
             UART_sensor_flag = 1;  // sensor 1 is sending data
             UART_byte = 0;  // for first datum from sensor 1
             //three_digit_flag = 1; // sending first digit
@@ -63,14 +62,22 @@ void main()
             //three_digit_flag = 1; // sending first digit
             UCA1IE |= UCTXIE; // Enable USCI_A1 TX interrupt
             LPM0;
+//            b=TA0R;
   }
 }
 
 void clock_setup(){
-    P2DIR |= BIT2;    // check smclk, 1MHz default
+    UCSCTL3 = SELREF_2;
+    UCSCTL4 |= SELA_2;
+    UCSCTL0 = 0x0000;
+    UCSCTL1 = DCORSEL_4;
+    UCSCTL2 |= 249;
+    P2DIR |= BIT2;    // check smclk, 1MHz default/ 8.39MHz
     P2SEL |= BIT2;    // check smclk, 1MHz default
     P1DIR |= BIT0;    // check aclk, 32.8KHz default
     P1SEL |= BIT0;    // check aclk, 32.8KHz default
+    P7DIR |= BIT7;    // check mclk, 1MHz default/ 8.39MHz
+    P7SEL |= BIT7;    // check mclk, 1MHz default
 }
 
 void spi_setup()
@@ -90,6 +97,9 @@ void spi_setup()
 
 void spi_com1()
 {
+//  P8OUT ^= BIT1;    // for debugging
+//    TA0CCR0 = 50000;    // for debugging
+//    TA0CTL = TASSEL_2 + MC_1 + TACLR; // for debugging
   sensor_select = 1;
   P1OUT &= ~BIT4; // select sensor 1
   i=0;
@@ -100,82 +110,103 @@ void spi_com1()
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 1; // command to get x axis data
   LPM0;
+//  a=TA0R;   // for debugging
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 0x00; // command to get x axis data
   LPM0;
+//  b=TA0R;   // for debugging
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 0x00; // command to get x axis data
   LPM0;
+//  c=TA0R;   // for debugging
   P1OUT &= ~BIT4; // select sensor 1
   P1OUT |= BIT2; // sensor 1 reset
   P1OUT &= ~BIT2; // sensor 1 reset
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 2; // command to get y axis data
   LPM0;
+//  d=TA0R;   // for debugging
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 0x00; // command to get y axis data
   LPM0;
+//  e=TA0R;   // for debugging
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 0x00; // command to get y axis data
   LPM0;
+//  f=TA0R;   // for debugging
   P1OUT &= ~BIT4; // select sensor 1
   P1OUT |= BIT2; // sensor 1 reset
   P1OUT &= ~BIT2; // sensor 1 reset
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 3; // command to get z axis data
   LPM0;
+//  g=TA0R;   // for debugging
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 0x00; // command to get z axis data
   LPM0;
+//  h=TA0R;   // for debugging
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 0x00; // command to get z axis data
   LPM0;
   P1OUT |= BIT4;    // sensor 1 inactive
+//  k1=TA0R;   // for debugging
 }
 
 void spi_com2()
 {
+//  P8OUT ^= BIT1;    // for debugging
+//    TA0CCR0 = 50000;    // for debugging
+//      TA0CTL = TASSEL_2 + MC_1 + TACLR; // for debugging
   sensor_select = 2;
-  P1OUT &= ~BIT5; // select sensor 1
+  P1OUT &= ~BIT5; // select sensor 2
   i=0;
-  PRXData_s2 = (unsigned char *)RXData_s2;  // pointer for RXData_s1
-  P1OUT |= BIT3; // sensor 1 reset
-  P1OUT &= ~BIT3; // sensor 1 reset
+  PRXData_s2 = (unsigned char *)RXData_s2;  // pointer for RXData_s2
+  P1OUT |= BIT3; // sensor 2 reset
+  P1OUT &= ~BIT3; // sensor 2 reset
   // sending 1 command byte followed by 2 dummy byte to receive 2 byte data for each axis
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 1; // command to get x axis data
   LPM0;
+//  a=TA0R;   // for debugging
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 0x00; // command to get x axis data
   LPM0;
+//  b=TA0R;   // for debugging
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 0x00; // command to get x axis data
   LPM0;
-  P1OUT &= ~BIT5; // select sensor 1
-  P1OUT |= BIT3; // sensor 1 reset
-  P1OUT &= ~BIT3; // sensor 1 reset
+//  c=TA0R;   // for debugging
+  P1OUT &= ~BIT5; // select sensor 2
+  P1OUT |= BIT3; // sensor 2 reset
+  P1OUT &= ~BIT3; // sensor 2 reset
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 2; // command to get y axis data
   LPM0;
+//  d=TA0R;   // for debugging
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 0x00; // command to get y axis data
   LPM0;
+//  e=TA0R;   // for debugging
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 0x00; // command to get y axis data
   LPM0;
+//  f=TA0R;   // for debugging
   P1OUT &= ~BIT5; // select sensor 1
   P1OUT |= BIT3; // sensor 1 reset
   P1OUT &= ~BIT3; // sensor 1 reset
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 3; // command to get z axis data
   LPM0;
+//  g=TA0R;   // for debugging
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 0x00; // command to get z axis data
   LPM0;
+//  h=TA0R;   // for debugging
   while (!(UCB0IFG&UCTXIFG)); // USCIB0 TX buffer ready?
   UCB0TXBUF = 0x00; // command to get z axis data
   LPM0;
-  P1OUT |= BIT5;    // sensor 1 inactive
+  P1OUT |= BIT5;    // sensor 2 inactive
+//  k2=TA0R;   // for debugging
 }
 
 #if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
@@ -190,16 +221,25 @@ void __attribute__ ((interrupt(USCI_B0_VECTOR))) USCI_B0_ISR (void)
   switch(__even_in_range(UCB0IV,4))
   {
     case 0: break;
-    case 2:
-    i++;                               // Vector 2 - RXIFG
+    case 2: // Vector 2 - RXIFG
+//      for(j1=1;j1<50;j1++);    // without this delay, sensor 2 data skips one bit, need to check, this is the min delay that works
       while (!(UCB0IFG&UCTXIFG));           // USCIB0 TX buffer ready?
-      while (!(P2IN&BIT4));           //
-      if(i!=1 && i!=4 && i!=7)  // data received while sending command byte is ignored, storing data received while sending dummy byte
+      if(i!=0 && i!=3 && i!=6)  // data received while sending command byte is ignored, storing data received while sending dummy byte
+      {
           if(sensor_select == 1)    // checking which sensor is active to determine where to store the data
               *PRXData_s1++ = UCB0RXBUF;               // Move RX data to address PRxData
           else
               *PRXData_s2++ = UCB0RXBUF;               // Move RX data to address PRxData
+      }
+      else  // wait for new data only after sending command byte
+          {
+          if(sensor_select == 1)
+              while (!(P2IN&BIT4));           // check DRDY pin if new data is ready in sensor 1
+          else
+              while (!(P2IN&BIT5));           // check DRDY pin if new data is ready in sensor 2
+          }
       LPM0_EXIT;
+      i++;
       break;
     case 4: break;                          // Vector 4 - TXIFG
     default: break;
@@ -210,7 +250,7 @@ void ADC_setup(){
     P6SEL |= 0x01;                            // Enable A/D channel A0
 //    REFCTL0 = REFMSTR + REFVSEL_0 + REFON;
     ADC12CTL0 = ADC12ON+ADC12SHT0_8+ADC12MSC;   // Turn on ADC12, set sampling time
-    ADC12CTL1 = ADC12SSEL_3+ADC12SHP+ADC12CONSEQ_2;       // Use sampling timer, set mode
+    ADC12CTL1 = ADC12SSEL_1+ADC12SHP+ADC12CONSEQ_2;       // Use sampling timer, set mode, aclk
 //    ADC12IE = 0x01;                           // Enable ADC12IFG.0
 //    ADC12MCTL0 = ADC12SREF_1;
       ADC12CTL0 |= ADC12ENC;                    // Enable conversions
@@ -262,7 +302,7 @@ void UART_setup(){
   P4SEL |= BIT5+BIT4; // UCA1TXD and UCA1RXD
   UCA1CTL1 |= UCSWRST;  // reset enabled
   UCA1CTL1 |= UCSSEL_2; // SMCLK
-  UCA1BR0 = 9;  // 1MHz/9 = 115200
+  UCA1BR0 = 72;  // 1MHz/9 = 115200
   UCA1BR1 = 0;  // 1MHz/9 = 115200
   UCA1CTL1 &= ~UCSWRST; // reset disabled
 }
