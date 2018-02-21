@@ -68,15 +68,16 @@ void main()
 
 void clock_setup(){
     UCSCTL3 = SELREF_2;
-    UCSCTL4 |= SELA_2;
+    UCSCTL4 = SELA_2 + SELS_4 + SELM_3;
     UCSCTL0 = 0x0000;
-    UCSCTL1 = DCORSEL_4;
-    UCSCTL2 |= 249;
-    P2DIR |= BIT2;    // check smclk, 1MHz default/ 8.39MHz
+    UCSCTL1 = DCORSEL_5;
+    UCSCTL2 |= FLLD_1 + 249;
+    UCSCTL5 |= DIVS__8;
+    P2DIR |= BIT2;    // check smclk, 1MHz default
     P2SEL |= BIT2;    // check smclk, 1MHz default
     P1DIR |= BIT0;    // check aclk, 32.8KHz default
     P1SEL |= BIT0;    // check aclk, 32.8KHz default
-    P7DIR |= BIT7;    // check mclk, 1MHz default/ 8.39MHz
+    P7DIR |= BIT7;    // check mclk, 1MHz default/ 16.8MHz
     P7SEL |= BIT7;    // check mclk, 1MHz default
 }
 
@@ -250,7 +251,7 @@ void ADC_setup(){
     P6SEL |= 0x01;                            // Enable A/D channel A0
 //    REFCTL0 = REFMSTR + REFVSEL_0 + REFON;
     ADC12CTL0 = ADC12ON+ADC12SHT0_8+ADC12MSC;   // Turn on ADC12, set sampling time
-    ADC12CTL1 = ADC12SSEL_1+ADC12SHP+ADC12CONSEQ_2;       // Use sampling timer, set mode, aclk
+    ADC12CTL1 = ADC12SSEL_3+ADC12SHP+ADC12CONSEQ_2;       // Use sampling timer, set mode, smclk
 //    ADC12IE = 0x01;                           // Enable ADC12IFG.0
 //    ADC12MCTL0 = ADC12SREF_1;
       ADC12CTL0 |= ADC12ENC;                    // Enable conversions
@@ -302,7 +303,7 @@ void UART_setup(){
   P4SEL |= BIT5+BIT4; // UCA1TXD and UCA1RXD
   UCA1CTL1 |= UCSWRST;  // reset enabled
   UCA1CTL1 |= UCSSEL_2; // SMCLK
-  UCA1BR0 = 72;  // 1MHz/9 = 115200
+  UCA1BR0 = 9;  // 1MHz/9 = 115200
   UCA1BR1 = 0;  // 1MHz/9 = 115200
   UCA1CTL1 &= ~UCSWRST; // reset disabled
 }
