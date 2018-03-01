@@ -38,7 +38,7 @@ void main()
   {
       spi_com1();
       spi_com2();
-//      distance = 85;
+      //      distance = 85;  // for debugging
       j++;
 //      P8OUT ^= BIT1;    // for debugging
       if (j==12){
@@ -73,12 +73,12 @@ void clock_setup(){
     UCSCTL1 = DCORSEL_5;
     UCSCTL2 |= FLLD_1 + 249;
     UCSCTL5 |= DIVS__8;
-    P2DIR |= BIT2;    // check smclk, 1MHz default
-    P2SEL |= BIT2;    // check smclk, 1MHz default
-    P1DIR |= BIT0;    // check aclk, 32.8KHz default
-    P1SEL |= BIT0;    // check aclk, 32.8KHz default
-    P7DIR |= BIT7;    // check mclk, 1MHz default/ 16.8MHz
-    P7SEL |= BIT7;    // check mclk, 1MHz default
+//    P2DIR |= BIT2;    // check smclk, 1MHz default
+//    P2SEL |= BIT2;    // check smclk, 1MHz default
+//    P1DIR |= BIT0;    // check aclk, 32.8KHz default
+//    P1SEL |= BIT0;    // check aclk, 32.8KHz default
+//    P7DIR |= BIT7;    // check mclk, 1MHz default/ 16.8MHz
+//    P7SEL |= BIT7;    // check mclk, 1MHz default
 }
 
 void spi_setup()
