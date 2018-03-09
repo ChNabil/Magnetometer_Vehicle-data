@@ -16,22 +16,8 @@ z2 = typecast(uint16(z2),'int16');
 distance = xlsread('Book2',3,'G:G'); % in cm
 
 % converting sample number to sec, for plotting
-%t=0:1/fs:(size(mag1)/fs)-1/fs; 
-
-% plot raw data
-figure(1)
-subplot(321)
-plot(x1)
-subplot(323)
-plot(y1)
-subplot(325)
-plot(z1)
-subplot(322)
-plot(x2)
-subplot(324)
-plot(y2)
-subplot(326)
-plot(z2)
+%t = 0:1/fs:(size(x1)/fs)-1/fs; 
+t = [0:size(x1)-1]/fs;
 
 % needs to be double before squaring, or exceeds limit when squaring
 x1 = double(x1);  
@@ -49,59 +35,90 @@ x2 = medfilt1(x2,3);
 y2 = medfilt1(y2,3);
 z2 = medfilt1(z2,3);
 
+% plot raw data
+figure()
+subplot(321)
+plot(t,x1)
+ylabel('Mag. field')
+subplot(323)
+plot(t,y1)
+ylabel('Mag. field')
+subplot(325)
+plot(t,z1)
+ylabel('Mag. field')
+subplot(322)
+plot(t,x2)
+ylabel('Mag. field')
+subplot(324)
+plot(t,y2)
+ylabel('Mag. field')
+subplot(326)
+plot(t,z2)
+ylabel('Mag. field')
+xlabel('Time (s)')
+
 % make the signals 0 mean, otherwise moving avg filter and
 % cross-correlation wont work
-x1 = x1-mean(x1);
-y1 = y1-mean(y1);
-z1 = z1-mean(z1);
-x2 = x2-mean(x2);
-y2 = y2-mean(y2);
-z2 = z2-mean(z2);
+x1_filt = x1-mean(x1);
+y1_filt = y1-mean(y1);
+z1_filt = z1-mean(z1);
+x2_filt = x2-mean(x2);
+y2_filt = y2-mean(y2);
+z2_filt = z2-mean(z2);
 
 % moving average filter
-x1 = conv(x1, ones(101,1)/101, 'same');
-y1 = conv(y1, ones(101,1)/101, 'same');
-z1 = conv(z1, ones(101,1)/101, 'same');
-x2 = conv(x2, ones(101,1)/101, 'same');
-y2 = conv(y2, ones(101,1)/101, 'same');
-z2 = conv(z2, ones(101,1)/101, 'same');
+x1_filt = conv(x1_filt, ones(101,1)/101, 'same');
+y1_filt = conv(y1_filt, ones(101,1)/101, 'same');
+z1_filt = conv(z1_filt, ones(101,1)/101, 'same');
+x2_filt = conv(x2_filt, ones(101,1)/101, 'same');
+y2_filt = conv(y2_filt, ones(101,1)/101, 'same');
+z2_filt = conv(z2_filt, ones(101,1)/101, 'same');
 
 % plot filtered data
-figure(2)
+figure()
 subplot(321)
-plot(x1)
+plot(t,x1_filt)
+ylabel('Mag. field')
 subplot(323)
-plot(y1)
+plot(t,y1_filt)
+ylabel('Mag. field')
 subplot(325)
-plot(z1)
+plot(t,z1_filt)
+ylabel('Mag. field')
 subplot(322)
-plot(x2)
+plot(t,x2_filt)
+ylabel('Mag. field')
 subplot(324)
-plot(y2)
+plot(t,y2_filt)
+ylabel('Mag. field')
 subplot(326)
-plot(z2)
+plot(t,z2_filt)
+ylabel('Mag. field')
+xlabel('Time (s)')
 
 mag1 = sqrt(x1.^2+y1.^2+z1.^2);
 mag1 = mag1-mean(mag1);
+mag1 = conv(mag1, ones(101,1)/101, 'same'); % moving avg filter
 % mag1 = medfilt1(mag1,5);    %   median filter to remove random spikes
 %mag1 = mag1*2000/65536; % converting the value into uT
 mag2 = sqrt(x2.^2+y2.^2+z2.^2);
 mag2 = mag2-mean(mag2);
+mag2 = conv(mag2, ones(101,1)/101, 'same'); % moving avg filter
 % mag2 = medfilt1(mag2,5);    %   median filter to remove random spikes
 %mag2 = mag2*2000/65536;
-figure(3)
+figure()
 subplot(311)
-plot(mag1)
+plot(t,mag1)
 ylabel('Mag. field')
 legend('Magnetometer 1')
 subplot(312)
-plot(mag2)
+plot(t,mag2)
 ylabel('Mag. field')
 legend('Magnetometer 2')
 subplot(313)
-plot(distance)
+plot(t,distance)
 %xlabel('Time (s)')
-xlabel('Sample')
+xlabel('Time (s)')
 ylabel('Distance (cm)')
 legend('Ultrasonic sensor')
 
@@ -109,4 +126,4 @@ legend('Ultrasonic sensor')
 [cor, lag] = xcorr(mag1,mag2);
 [~,i] = max(abs(cor));
 lag_time = abs(lag(i))/fs;  % lag in samples/sampling fr. lagtime in sec
-speed = dis_snsrs/lag_time; % speed of vehicle in m/s
+speed = dis_snsrs/lag_time*3.6; % speed of vehicle in km/h
