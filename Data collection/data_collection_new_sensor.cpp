@@ -211,7 +211,9 @@ void main()
           }
 
           if(ice_present_flag == 1) // if ice present, threshold speed reduced by 50%
-              speed_th = speed_th/2;
+              speed_th = 0.3; // if write speed_th/2, will divide by 2 in every loop
+          else
+              speed_th = 0.6;   // so that speed_th changes back to 0.6 when switch is pressed twice
 
           if(length > length_th)    // if length of the car is longer than avg
               speed_th = speed_th - (speed_th * ((int(length - length_th)) * 0.1));   // 10% reduction in speed threshold for each meter increase in length from avg length
