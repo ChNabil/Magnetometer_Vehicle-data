@@ -69,6 +69,7 @@ void main()
   {
       spi_com1();
       spi_com2();
+//      P8OUT ^= BIT1;    // to check sampling fr
 
       //    1 set of data is received for 2 magnetometer sensors
       x1 = (RXData_s1[0]*256)+RXData_s1[1];
