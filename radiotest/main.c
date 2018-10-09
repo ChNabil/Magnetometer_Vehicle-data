@@ -46,6 +46,9 @@ void main()
   WDTCTL = WDTPW + WDTHOLD;
   _EINT();
 
+  // to check sampling rate
+  P8DIR |= BIT1;
+
   // for radio start
   char addr[5];
   char buf[3];
@@ -72,8 +75,8 @@ void main()
 
 
 
-  dist_betwn_snsrs = 0.125; // in m
-  sampling_rate = 240;
+  dist_betwn_snsrs = 0.17; // in m
+  sampling_rate = 203;
   ice_present_flag = 0; // if there's ice, flag set to 1
   length_th = 4.1;  // 4.1m, length of compact car according us epa
   speed_th = 0.6; // 0.6 m/s, for demonstration, will be changed for later
@@ -105,7 +108,7 @@ void main()
   {
       spi_com1();
       spi_com2();
-//      P8OUT ^= BIT1;    // to check sampling fr
+      P8OUT ^= BIT1;    // to check sampling fr
 
       //    1 set of data is received for 2 magnetometer sensors
       x1 = (RXData_s1[0]*256)+RXData_s1[1];
@@ -256,6 +259,7 @@ void main()
               //speed_th = speed_th - (speed_th * ((int(length - length_th)) * 0.1));   // 10% reduction in speed threshold for each meter increase in length from avg length
 
           if(speed > speed_th)
+//          if(speed > 0) // for testing. will change later
           {
               P1OUT |= BIT0;    // warning sign on, will remain on until another car detected
 
@@ -266,10 +270,12 @@ void main()
               else
                   buf[1] = 2;
 
-              if(ice_present_flag == 1) // if ice on road, send 1, else 0
-                  buf[2] = 1;
-              else
+              if(ice_present_flag == 0) // if ice on road, send 1, else 0
                   buf[2] = 0;
+              else
+                  buf[2] = 1;
+
+//              buf[1] = length;  // ultrasonic sensor is disconnected now so checking if the length measured is accurate
 
               w_tx_payload(3, buf);
                       msprf24_activate_tx();
