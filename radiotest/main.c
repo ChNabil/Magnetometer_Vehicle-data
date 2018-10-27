@@ -13,6 +13,9 @@ void spi_com1();
 void spi_com2();
 void ADC_setup();
 void UART_setup();
+void spi_setup_acclmtr();
+void spi_com_acclmtr();
+void acclmtr_config();
 
 // for radio start
 volatile unsigned int user;
@@ -40,7 +43,11 @@ volatile int mag1_1000[1000];
 volatile int mag2_1000[1000];
 volatile float speed, length, speed_th, length_th, dist_betwn_snsrs, sampling_rate;
 volatile int store_1000_flag, highest_point_loc_1, highest_point_loc_2, ice_present_flag;
-
+volatile unsigned char acclmtr_data[2];  // received 2 bytes from acclmtr z axis
+unsigned char *Pacclmtr_data; // pointer for acclmtr data
+volatile int z_acclmtr[1000];
+char acclmtr_config_flag;
+char i_acclmtr;
 void main()
 {
   WDTCTL = WDTPW + WDTHOLD;
@@ -85,6 +92,8 @@ void main()
   spi_setup();
   ADC_setup();
   UART_setup();
+  spi_setup_acclmtr();
+  acclmtr_config();
   j = 0;
   mag_th_1 = 0;
   mag_th_2 = 0;
@@ -108,6 +117,7 @@ void main()
   {
       spi_com1();
       spi_com2();
+      spi_com_acclmtr();
       P8OUT ^= BIT1;    // to check sampling fr
 
       //    1 set of data is received for 2 magnetometer sensors
@@ -119,6 +129,7 @@ void main()
       z2 = (RXData_s2[4]*256)+RXData_s2[5];
       mag1 = sqrt((x1*x1) + (y1*y1) + (z1*z1));
       mag2 = sqrt((x2*x2) + (y2*y2) + (z2*z2));
+
 
       if(count1<100)    // storing first 100 data and calculating threshold
           {
@@ -148,7 +159,7 @@ void main()
               {
               for (count11=90;count11<100;count11++)
           {
-              if((mag_rcnt_1[count11]-mag_th_1) > 3 || (mag_rcnt_1[count11]-mag_th_1) < -3)
+              if((mag_rcnt_1[count11]-mag_th_1) > 2 || (mag_rcnt_1[count11]-mag_th_1) < -2)
                   count3++;
           }
           if (count3 == 10)
@@ -159,6 +170,9 @@ void main()
               {
                   mag1_1000[count12] = mag_rcnt_1[count12];
                   mag2_1000[count12] = mag_rcnt_2[count12];
+                  //only storing acclmtr data when vehicle is detected by mgntmtr.
+                  //for +-16 g range, RX_data/3=accelaration in m/s^2. (RX_data/32)*9.8=RX_data/3.
+                  z_acclmtr[count12] = ((acclmtr_data[1]*256)+acclmtr_data[0])/3; // acclmtr data z axis
               }
           }
               }
@@ -168,6 +182,9 @@ void main()
       {
           mag1_1000[count4] = mag1;
           mag2_1000[count4] = mag2;
+          //only storing acclmtr data when vehicle is detected by mgntmtr.
+          //for +-16 g range, RX_data/3=accelaration in m/s^2. (RX_data/32)*9.8=RX_data/3.
+          z_acclmtr[count4] = ((acclmtr_data[1]*256)+acclmtr_data[0])/3; // acclmtr data z axis
           count4++;
       }
 
@@ -609,10 +626,12 @@ void __attribute__ ((interrupt(USCI_A1_VECTOR))) USCI_A1_ISR (void)
     }
     else if (UART_sensor_flag == 3){
       if (UART_byte == 0)
-           UCA1TXBUF = (int)(distance/256);
+           //UCA1TXBUF = (int)(distance/256); // sending acclmtr data instead distance
+           UCA1TXBUF = ((acclmtr_data[1]*256)+acclmtr_data[0])/3;
            else if (UART_byte == 1)
            {
-                UCA1TXBUF = distance - (256*((int)(distance/256)));
+                //UCA1TXBUF = distance - (256*((int)(distance/256)));
+               UCA1TXBUF = 0;
                   //UCA1IE &= ~UCTXIE;
                   //LPM0_EXIT;
                 }
@@ -662,4 +681,91 @@ __interrupt void Port_1(void)
 
 
     }
+}
+
+void spi_setup_acclmtr()
+{
+  P4SEL |= BIT1 + BIT2 + BIT3;  // USCB1SIMO, UCB1SOMI, UCB1CLK select
+  P8DIR |= BIT2; //8.2 for selecting slave
+  UCB1CTL1 |= UCSWRST;  // reset
+  UCB1CTL0 |= UCMST+UCSYNC+UCCKPL+UCMSB;  // master mode, synchronous, inactive clock high, msb first
+  UCB1CTL1 |= UCSSEL_2; // using smclk
+  UCB1CTL1 &= ~UCSWRST; // reset disabled
+  UCB1IE |= UCRXIE; // rx interrupt
+}
+
+void acclmtr_config()
+{
+    acclmtr_config_flag = 1;
+    P8OUT &= ~BIT2; // slave select
+    i_acclmtr = 0;  // will send 4 bytes, 2 address and 2 value
+    while (!(UCB1IFG&UCTXIFG)); // USCIB1 TX buffer ready?
+      UCB1TXBUF = 0x2C; // Address of BW_rate register
+      LPM0;
+      while (!(UCB1IFG&UCTXIFG)); // USCIB1 TX buffer ready?
+        UCB1TXBUF = 0x0B; // Set value to "0x0B" for 400Hz data rate
+        LPM0;
+        while (!(UCB1IFG&UCTXIFG)); // USCIB1 TX buffer ready?
+          UCB1TXBUF = 0x31; // Address of Data_format register
+          LPM0;
+          while (!(UCB1IFG&UCTXIFG)); // USCIB0 TX buffer ready?
+            UCB1TXBUF = 0x03; // 4 wire SPI, +-16g range. will change the range if needed, 10 bit mode
+            LPM0;
+            while (!(UCB1IFG&UCTXIFG)); // USCIB1 TX buffer ready?
+                  UCB1TXBUF = 0x2D; // Address of Power_ctl register
+                  LPM0;
+                  while (!(UCB1IFG&UCTXIFG)); // USCIB1 TX buffer ready?
+                    UCB1TXBUF = 0x08; // Set value to "0x08" to start measuring
+                    LPM0;
+
+                    P8OUT |= BIT2;    // acclmtr inactive
+
+                    acclmtr_config_flag = 0; // next time in ISR, i will start saving data, config is done
+}
+
+void spi_com_acclmtr()
+{
+  P8OUT &= ~BIT2; // slave select
+  i_acclmtr=0;
+  Pacclmtr_data = (unsigned char *)acclmtr_data;  // pointer for acclmtr_data
+  // sending 1 command byte followed by 2 dummy byte to receive 2 byte data for z axis
+  while (!(UCB1IFG&UCTXIFG)); // USCIB1 TX buffer ready?
+  UCB1TXBUF = 0xF6; // reg addrs for z0 data is 0x36, to read bit 8 is 1, for multiple bytes read bit7 is 1. so 0x36|0x80|0x40=0xF6
+  LPM0;
+  while (!(UCB1IFG&UCTXIFG)); // USCIB1 TX buffer ready?
+  UCB1TXBUF = 0x00; // command to get z axis data
+  LPM0;
+  while (!(UCB1IFG&UCTXIFG)); // USCIB1 TX buffer ready?
+  UCB1TXBUF = 0x00; // command to get z axis data
+  LPM0;
+  P8OUT |= BIT2;    // acclmtr inactive
+}
+
+#if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
+#pragma vector=USCI_B1_VECTOR
+__interrupt void USCI_B1_ISR(void)
+#elif defined(__GNUC__)
+void __attribute__ ((interrupt(USCI_B1_VECTOR))) USCI_B1_ISR (void)
+#else
+#error Compiler not supported!
+#endif
+{
+  switch(__even_in_range(UCB1IV,4))
+  {
+    case 0: break;
+    case 2:
+        while (!(UCB1IFG&UCTXIFG));           // USCIB1 TX buffer ready?
+        if(acclmtr_config_flag == 0){   // config is done
+      if(i_acclmtr!=0)  // data received while sending command byte is ignored, storing data received while sending dummy byte
+      {
+              *Pacclmtr_data++ = UCB1RXBUF;               // Move RX data to address PRxData
+      }
+        }
+
+      LPM0_EXIT;
+      i_acclmtr++;
+      break;
+    case 4: break;                          // Vector 4 - TXIFG
+    default: break;
+  }
 }
