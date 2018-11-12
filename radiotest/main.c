@@ -16,6 +16,10 @@ void UART_setup();
 void spi_setup_acclmtr();
 void spi_com_acclmtr();
 void acclmtr_config();
+void radio_setup();
+void activate_rx_mode();
+void send_msg();
+void rcv_msg();
 
 // for radio start
 volatile unsigned int user;
@@ -48,6 +52,15 @@ unsigned char *Pacclmtr_data; // pointer for acclmtr data
 volatile int z_acclmtr[1000];
 char acclmtr_config_flag;
 char i_acclmtr;
+// for radio start
+char addr_tx[5];
+char addr_rx[5];
+char buf_s[6];//sent msg 6 bits. 1.sender add. 2.Road no. 3.Speed. 4.Lane no. 5.Ice condition 6. Warning
+char buf_r[6];//rcvd msg 6 bits. 1.sender add. 2.Road no. 3.Speed. 4.Lane no. 5.Ice condition 6. Warning
+char sender_add = 1;
+char road_no = 1;
+char rcvd_msg_flag;
+
 void main()
 {
   WDTCTL = WDTPW + WDTHOLD;
@@ -55,32 +68,11 @@ void main()
 
   // to check sampling rate
   P8DIR |= BIT1;
+  user = 0xFE;  // for radio
 
-  // for radio start
-  char addr[5];
-  char buf[3];
-  user = 0xFE;
-  /* Initial values for nRF24L01+ library config variables */
-    rf_crc = RF24_EN_CRC | RF24_CRCO; // CRC enabled, 16-bit
-    rf_addr_width      = 5;
-    rf_speed_power     = RF24_SPEED_1MBPS | RF24_POWER_0DBM;
-    rf_channel         = 120;
-    msprf24_init();  // All RX pipes closed by default
-    msprf24_set_pipe_packetsize(0, 3);
-        msprf24_open_pipe(0, 1);  // Open pipe#0 with Enhanced ShockBurst enabled for receiving Auto-ACKs
-            // Note: Pipe#0 is hardcoded in the transceiver hardware as the designated "pipe" for a TX node to receive
-            // auto-ACKs.  This does not have to match the pipe# used on the RX side.
-
-        // Transmit to 'rad01' (0x72 0x61 0x64 0x30 0x31)
-        msprf24_standby();
-        user = msprf24_current_state();
-        addr[0] = 0xDE; addr[1] = 0xAD; addr[2] = 0xBE; addr[3] = 0xEF; addr[4] = 0x00;
-        w_tx_addr(addr);
-        w_rx_addr(0, addr);  // Pipe 0 receives auto-ack's, autoacks are sent back to the TX addr so the PTX node
-                             // needs to listen to the TX addr on pipe#0 to receive them.
-        // for radio end
-
-
+  radio_setup();
+  activate_rx_mode();   // start radio in rx mode, change to tx mode when needed
+  rcvd_msg_flag = 0; // no msg rcvd yet
 
   dist_betwn_snsrs = 0.17; // in m
   sampling_rate = 203;
@@ -120,7 +112,10 @@ void main()
       spi_com_acclmtr();
       P8OUT ^= BIT1;    // to check sampling fr
 
-      //    1 set of data is received for 2 magnetometer sensors
+      rcv_msg();    // keep checking for rcvd msg.  take action when msg rcvd
+//      if(rcvd_msg_flag == 1)  // msg rcvd. see if any action needed
+
+      //    1 set of data is received for 2 magnatometer sensors
       x1 = (RXData_s1[0]*256)+RXData_s1[1];
       y1 = (RXData_s1[2]*256)+RXData_s1[3];
       z1 = (RXData_s1[4]*256)+RXData_s1[5];
@@ -275,47 +270,33 @@ void main()
           //if(length > length_th)    // if length of the car is longer than avg
               //speed_th = speed_th - (speed_th * ((int(length - length_th)) * 0.1));   // 10% reduction in speed threshold for each meter increase in length from avg length
 
-          if(speed > speed_th)
-//          if(speed > 0) // for testing. will change later
-          {
-              P1OUT |= BIT0;    // warning sign on, will remain on until another car detected
-
+//          if(speed > 0) // sends message whenever detects vehicle
+//          {
               // for radio start
-              buf[0] = (int)(speed);    // sending speed
+              buf_s[0] = sender_add;
+              buf_s[1] = road_no;
+              buf_s[2] = (int)(speed);    // sending speed
               if(distance<300)  // if the car is less than 300 cm away, lane 1, else lane 2
-                  buf[1] = 1;
+                  buf_s[3] = 1;
               else
-                  buf[1] = 2;
+                  buf_s[3] = 2;
 
               if(ice_present_flag == 0) // if ice on road, send 1, else 0
-                  buf[2] = 0;
+                  buf_s[4] = 0;
               else
-                  buf[2] = 1;
+                  buf_s[4] = 1;
 
-//              buf[1] = length;  // ultrasonic sensor is disconnected now so checking if the length measured is accurate
+              if(speed > speed_th)
+              {
+                  buf_s[5] = 1; // warning
+                  P1OUT |= BIT0;    // warning sign on, will remain on until another car detected
+              }
+              else
+                  buf_s[5] = 0;
 
-              w_tx_payload(3, buf);
-                      msprf24_activate_tx();
-                      LPM0;
-
-                      if (rf_irq & RF24_IRQ_FLAGGED) {
-                          rf_irq &= ~RF24_IRQ_FLAGGED;
-
-                          msprf24_get_irq_reason();
-                          if (rf_irq & RF24_IRQ_TX){
-                              //P1OUT &= ~BIT0; // Red LED off
-                              //P4OUT |= BIT7;  // Green LED on
-                          }
-                          if (rf_irq & RF24_IRQ_TXFAILED){
-                              //P4OUT &= ~BIT7; // Green LED off
-                              //P1OUT |= BIT0;  // Red LED on
-                          }
-
-                          msprf24_irq_clear(rf_irq);
-                          user = msprf24_get_last_retransmits();
-                      }
-                      // for radio end
-          }
+              send_msg();
+              activate_rx_mode();   // after sending msg, keep radio in rx mode and keep checking for rcvd msg until a new car is detected
+//          }                       // will only go to tx mode when a new car is detected or a msg is rcvd (dpndng on the msg)
 
       }
 
@@ -769,3 +750,79 @@ void __attribute__ ((interrupt(USCI_B1_VECTOR))) USCI_B1_ISR (void)
     default: break;
   }
 }
+
+void radio_setup(){
+    /* Initial values for nRF24L01+ library config variables */
+      rf_crc = RF24_EN_CRC | RF24_CRCO; // CRC enabled, 16-bit
+      rf_addr_width      = 5;
+      rf_speed_power     = RF24_SPEED_1MBPS | RF24_POWER_0DBM;
+      rf_channel         = 120;
+      msprf24_init();  // All RX pipes closed by default
+      msprf24_set_pipe_packetsize(0, 6);
+//          msprf24_open_pipe(0, 0);  // Open pipe#0 with Enhanced ShockBurst enabled for receiving Auto-ACKs
+              // Note: Pipe#0 is hardcoded in the transceiver hardware as the designated "pipe" for a TX node to receive
+              // auto-ACKs.  This does not have to match the pipe# used on the RX side.
+          msprf24_open_pipe(0, 0);
+          // Transmit to 'rad01' (0x72 0x61 0x64 0x30 0x31)
+          msprf24_standby();
+          user = msprf24_current_state();
+          addr_tx[0] = 0xDE; addr_tx[1] = 0xAD; addr_tx[2] = 0xBE; addr_tx[3] = 0xEF; addr_tx[4] = 0x00;
+          addr_rx[0] = 0xED; addr_rx[1] = 0xDA; addr_rx[2] = 0xEB; addr_rx[3] = 0xFE; addr_rx[4] = 0x11;
+          w_tx_addr(addr_tx);
+//          w_rx_addr(o, addr_tx);  // Pipe 0 receives auto-ack's, autoacks are sent back to the TX addr so the PTX node
+                               // needs to listen to the TX addr on pipe#0 to receive them.
+          w_rx_addr(0, addr_rx);
+          // for radio end
+}
+
+void send_msg(){
+    w_tx_payload(6, buf_s);
+            msprf24_activate_tx();
+            LPM0;
+
+            if (rf_irq & RF24_IRQ_FLAGGED) {
+                rf_irq &= ~RF24_IRQ_FLAGGED;
+
+                msprf24_get_irq_reason();
+                if (rf_irq & RF24_IRQ_TX){
+                    //P1OUT &= ~BIT0; // Red LED off
+                    //P4OUT |= BIT7;  // Green LED on
+                }
+                if (rf_irq & RF24_IRQ_TXFAILED){
+                    //P4OUT &= ~BIT7; // Green LED off
+                    //P1OUT |= BIT0;  // Red LED on
+                }
+
+                msprf24_irq_clear(rf_irq);
+                user = msprf24_get_last_retransmits();
+            }
+            // for radio end
+}
+
+void activate_rx_mode(){
+    // Receive mode
+     if (!(RF24_QUEUE_RXEMPTY & msprf24_queue_state())) {
+         flush_rx();
+     }
+     msprf24_activate_rx();
+//     LPM0;
+}
+
+void rcv_msg(){
+    if (rf_irq & RF24_IRQ_FLAGGED) {
+        rf_irq &= ~RF24_IRQ_FLAGGED;
+        msprf24_get_irq_reason();
+    }
+    if (rf_irq & RF24_IRQ_RX || msprf24_rx_pending()) {
+        r_rx_payload(6, buf_r);
+        msprf24_irq_clear(RF24_IRQ_RX);
+//        P1OUT ^= 0x01;
+        //user = 0xFE;
+        buf_r[2] = buf_r[2]*3.6; // converting m/s to Km/h
+        rcvd_msg_flag = 1;  // msg rcvd. chaeck if any action needed
+
+    }
+    else
+        rcvd_msg_flag = 0;  // indicating no msg rcvd
+}
+

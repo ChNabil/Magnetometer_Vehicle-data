@@ -3,37 +3,73 @@
 #include "nrf_userconfig.h"
 #include "stdint.h"
 
-    uint8_t addr[5];
-    uint8_t buf[3];
+    uint8_t addr_rx[5];
+    uint8_t addr_tx[5];
+    uint8_t buf_r[6]; //rcvd msg. 6 bits. 1.sender add. 2.Road no. 3.Speed. 4.Lane no. 5.Ice condition 6.Warning
+    uint8_t buf_s[6]; //sent msg. 6 bits. 1.sender add. 2.Road no. 3.Speed. 4.Lane no. 5.Ice condition 6.Warning
+    char sender_add, road_no, rcvd_msg_flag;
 
 volatile unsigned int user;
-char string[13];
-const char string1[6] = {"Speed "};
-char string2[3];
-const char string3[13] = {" Kmph   Lane "};
-const char string4[7] = {"   Ice "};
-const char string5[5] = {" No\n\r"};
-const char string6[6] = {" Yes\n\r"};
-int i; // counter
-int string_size;
-
-void uart_setup();
-void int_to_char();
+void radio_setup();
+void activate_rx_mode();
+void rcv_msg();
+void send_msg();
 
 int main()
 {
-
-
     WDTCTL = WDTHOLD | WDTPW;
+    sender_add = 5; // 5 for all vehicles. 1,2,3,4 for 4 RSUs
+    road_no = 1;    // assuming vehicle knows road no. Will try to figure out how vehicle can get that info
+                    // cant just receive it from RSUs since vehicle may receive msg from all 4 RSUs
     DCOCTL = CALDCO_16MHZ;
     BCSCTL1 = CALBC1_16MHZ;
     BCSCTL2 = DIVS_1;  // SMCLK = DCOCLK/2
     // SPI (USCI) uses SMCLK, prefer SMCLK < 10MHz (SPI speed limit for nRF24 = 10MHz)
-//    uart_setup();
-P1DIR |= 0x01;
-P1OUT |= 0x00;
+//P1DIR |= 0x01;
+//P1OUT |= 0x00;
     //user = 0xFE;
+radio_setup();
+activate_rx_mode();
+rcvd_msg_flag = 0;  // no msg rcvd yet
+int p;
 
+    while (1) {
+        rcv_msg();
+        if(rcvd_msg_flag == 1)   // new msg rcvd. see what action rqrd
+        if(buf_r[0] == buf_r[1] && buf_r[1] == road_no)  //when car rcvd a msg, only sent back msg if rcvd msg was sent by the RSU
+        {                                                //of the same road(buf_r[0]) that the car is on and also the msg was for the same road(buf_r[1])
+            buf_s[0] = 5;                               // sender address and road no is changed. rest of the msg is same since the car dont have any new info for now
+            buf_s[1] = 1;
+            buf_s[2] = buf_r[2];
+            buf_s[3] = buf_r[3];
+            buf_s[4] = buf_r[4];
+            buf_s[5] = buf_r[5];
+            for(p=0;p<30000;p++);
+            send_msg();
+            activate_rx_mode(); // going back to rx mode after sending msg
+        }
+    }
+    return 0;
+}
+
+void rcv_msg(){
+    if (rf_irq & RF24_IRQ_FLAGGED) {
+        rf_irq &= ~RF24_IRQ_FLAGGED;
+        msprf24_get_irq_reason();
+    }
+    if (rf_irq & RF24_IRQ_RX || msprf24_rx_pending()) {
+        r_rx_payload(6, buf_r);
+        msprf24_irq_clear(RF24_IRQ_RX);
+//        P1OUT ^= 0x01;
+        //user = 0xFE;
+        buf_r[2] = buf_r[2]*3.6; // converting m/s to Km/h
+        rcvd_msg_flag = 1;  // rcvd new msg. see if any action required
+    }
+    else
+        rcvd_msg_flag = 0;  // no new msg rcvd
+}
+
+void radio_setup(){
     /* Initial values for nRF24L01+ library config variables */
     rf_crc = RF24_EN_CRC | RF24_CRCO; // CRC enabled, 16-bit
     rf_addr_width      = 5;
@@ -41,128 +77,49 @@ P1OUT |= 0x00;
     rf_channel         = 120;
 
     msprf24_init();
-    msprf24_set_pipe_packetsize(0, 3);
-    msprf24_open_pipe(0, 1);  // Open pipe#0 with Enhanced ShockBurst
+    msprf24_set_pipe_packetsize(0, 6);
+    msprf24_open_pipe(0, 0);  // Open pipe#0 with Enhanced ShockBurst
+//    msprf24_open_pipe(1, 1);
 
-    // Set our RX address
-    addr[0] = 0xDE; addr[1] = 0xAD; addr[2] = 0xBE; addr[3] = 0xEF; addr[4] = 0x00;
-    w_rx_addr(0, addr);
+    // Set our TX and RX address
+    addr_rx[0] = 0xDE; addr_rx[1] = 0xAD; addr_rx[2] = 0xBE; addr_rx[3] = 0xEF; addr_rx[4] = 0x00;
+    addr_tx[0] = 0xED; addr_tx[1] = 0xDA; addr_tx[2] = 0xEB; addr_tx[3] = 0xFE; addr_tx[4] = 0x11;
+//    w_tx_addr(addr_rx);
+    w_rx_addr(0, addr_rx);
+    w_tx_addr(addr_tx);
+//    w_rx_addr(0, addr_tx);
+}
 
+void activate_rx_mode(){
     // Receive mode
-    if (!(RF24_QUEUE_RXEMPTY & msprf24_queue_state())) {
-        flush_rx();
-    }
-    msprf24_activate_rx();
-    LPM0;
+     if (!(RF24_QUEUE_RXEMPTY & msprf24_queue_state())) {
+         flush_rx();
+     }
+     msprf24_activate_rx();
+     LPM0;
+}
 
-    while (1) {
-        if (rf_irq & RF24_IRQ_FLAGGED) {
-            rf_irq &= ~RF24_IRQ_FLAGGED;
-            msprf24_get_irq_reason();
-        }
-        if (rf_irq & RF24_IRQ_RX || msprf24_rx_pending()) {
-            r_rx_payload(3, buf);
-            msprf24_irq_clear(RF24_IRQ_RX);
-            P1OUT ^= 0x01;
-            //user = 0xFE;
-            buf[0] = buf[0]*3.6; // converting m/s to Km/h
-
-     /*/ uart start
-            for (i=0;i<6;i++)
-            string[i] = string1[i];
-            i = 0;
-            string_size = 6;
-            UC0IE |= UCA0TXIE; // Enable USCI_A0 TX interrupt
+void send_msg(){
+    w_tx_payload(6, buf_s);
+            msprf24_activate_tx();
             LPM0;
 
-            int_to_char();
-            for (i=0;i<3;i++)
-            string[i] = string2[i];
-            i = 0;
-            string_size = 3;
-            UC0IE |= UCA0TXIE; // Enable USCI_A0 TX interrupt
-            LPM0;
+            if (rf_irq & RF24_IRQ_FLAGGED) {
+                rf_irq &= ~RF24_IRQ_FLAGGED;
 
-            for (i=0;i<13;i++)
-            string[i] = string3[i];
-            i = 0;
-            string_size = 13;
-            UC0IE |= UCA0TXIE; // Enable USCI_A0 TX interrupt
-            LPM0;
+                msprf24_get_irq_reason();
+                if (rf_irq & RF24_IRQ_TX){
+                    //P1OUT &= ~BIT0; // Red LED off
+                    //P4OUT |= BIT7;  // Green LED on
+                }
+                if (rf_irq & RF24_IRQ_TXFAILED){
+                    //P4OUT &= ~BIT7; // Green LED off
+                    //P1OUT |= BIT0;  // Red LED on
+                }
 
-            if(buf[1] == 1) // check the lane number
-                string[0] = 1;
-            else
-                string[0] = 2;
-
-            i = 0;
-            string_size = 1;
-            UC0IE |= UCA0TXIE; // Enable USCI_A0 TX interrupt
-            LPM0;
-
-            for (i=0;i<7;i++)
-            string[i] = string4[i];
-            i = 0;
-            string_size = 7;
-            UC0IE |= UCA0TXIE; // Enable USCI_A0 TX interrupt
-            LPM0;
-
-            if(buf[2] == 0)
-            {
-                for (i=0;i<5;i++)
-                           string[i] = string5[i];
-                           i = 0;
-                           string_size = 5;
-                           UC0IE |= UCA0TXIE; // Enable USCI_A0 TX interrupt
-                           LPM0;
+                msprf24_irq_clear(rf_irq);
+                user = msprf24_get_last_retransmits();
             }
-            else
-            {
-                for (i=0;i<6;i++)
-                           string[i] = string6[i];
-                           i = 0;
-                           string_size = 7;
-                           UC0IE |= UCA0TXIE; // Enable USCI_A0 TX interrupt
-                           LPM0;
-            }
-            LPM0;
-
-     // uart end */
-
-        } else {
-            //user = 0xFF;
-        }
-    }
-    return 0;
+            // for radio end
 }
 
-void uart_setup()
-{
-    P1SEL |= BIT1 + BIT2 ; // P1.1 = RXD, P1.2=TXD
-       P1SEL2 |= BIT1 + BIT2 ; // P1.1 = RXD, P1.2=TXD
-       UCA0CTL1 |= UCSSEL_2; // SMCLK
-          UCA0BR0 = 65; // 8MHz 9600    // max supported baud rate
-          UCA0BR1 = 3; // 8MHz 9600
-          UCA0MCTL = UCBRS2 + UCBRS0; // Modulation UCBRSx = 5
-          UCA0CTL1 &= ~UCSWRST; // **Initialize USCI state machine**
-}
-
-#pragma vector=USCIAB0TX_VECTOR
-__interrupt void USCI0TX_ISR(void)
-{
-   //P1OUT |= TXLED;
-     UCA0TXBUF = string[i++]; // TX next character
-    if (i == string_size - 1) // TX over?
-    {
-       UC0IE &= ~UCA0TXIE; // Disable USCI_A0 TX interrupt
-    //P1OUT &= ~TXLED;
-       LPM0_EXIT;
-    }
-}
-
-void int_to_char()
-{
-    string2[0] = buf[0]%100; // buf[0] is the speed
-    string2[1] = (buf[0] - (string2[0]*100))%10; // buf[0] is the speed
-    string2[2] = (buf[0] - ((string2[0]*100) + (string2[1]*10))); // buf[0] is the speed
-}
