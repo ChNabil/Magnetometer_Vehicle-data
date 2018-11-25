@@ -55,6 +55,7 @@ char i_acclmtr;
 // for radio start
 char addr_tx[5];
 char addr_rx[5];
+//char addr_rx3[5];
 char buf_s[6];//sent msg 6 bits. 1.sender add. 2.Road no. 3.Speed. 4.Lane no. 5.Ice condition 6. Warning
 char buf_r[6];//rcvd msg 6 bits. 1.sender add. 2.Road no. 3.Speed. 4.Lane no. 5.Ice condition 6. Warning
 char sender_add = 1;
@@ -154,7 +155,7 @@ void main()
               {
               for (count11=90;count11<100;count11++)
           {
-              if((mag_rcnt_1[count11]-mag_th_1) > 2 || (mag_rcnt_1[count11]-mag_th_1) < -2)
+              if((mag_rcnt_1[count11]-mag_th_1) > 3 || (mag_rcnt_1[count11]-mag_th_1) < -3)
                   count3++;
           }
           if (count3 == 10)
@@ -248,6 +249,7 @@ void main()
 
 
           speed = dist_betwn_snsrs/((highest_point_loc_2 - highest_point_loc_1)/sampling_rate);   // speed in m/s
+          speed = speed * 3.6;  // in Km/h
 
 // finding length. We know max point is "highest_point_loc_1", check when the mag becomes same as threshold after that.
 // since we are removing threshold, need to find when mag becomes close to 0. checking 2 consecutive samples to be sure.
@@ -763,15 +765,18 @@ void radio_setup(){
               // Note: Pipe#0 is hardcoded in the transceiver hardware as the designated "pipe" for a TX node to receive
               // auto-ACKs.  This does not have to match the pipe# used on the RX side.
           msprf24_open_pipe(0, 0);
+//          msprf24_open_pipe(1, 0);
           // Transmit to 'rad01' (0x72 0x61 0x64 0x30 0x31)
           msprf24_standby();
           user = msprf24_current_state();
-          addr_tx[0] = 0xDE; addr_tx[1] = 0xAD; addr_tx[2] = 0xBE; addr_tx[3] = 0xEF; addr_tx[4] = 0x00;
-          addr_rx[0] = 0xED; addr_rx[1] = 0xDA; addr_rx[2] = 0xEB; addr_rx[3] = 0xFE; addr_rx[4] = 0x11;
+          addr_tx[0] = 0x52; addr_tx[1] = 0x41; addr_tx[2] = 0x44; addr_tx[3] = 0x30; addr_tx[4] = 0x01;
+          addr_rx[0] = 0x52; addr_rx[1] = 0x41; addr_rx[2] = 0x44; addr_rx[3] = 0x30; addr_rx[4] = 0x01;
+//          addr_rx3[0] = 0x52; addr_rx3[1] = 0x41; addr_rx3[2] = 0x44; addr_rx3[3] = 0x30; addr_rx3[4] = 0x03;
           w_tx_addr(addr_tx);
 //          w_rx_addr(o, addr_tx);  // Pipe 0 receives auto-ack's, autoacks are sent back to the TX addr so the PTX node
                                // needs to listen to the TX addr on pipe#0 to receive them.
           w_rx_addr(0, addr_rx);
+//          w_rx_addr(3, addr_rx3);
           // for radio end
 }
 
@@ -818,7 +823,7 @@ void rcv_msg(){
         msprf24_irq_clear(RF24_IRQ_RX);
 //        P1OUT ^= 0x01;
         //user = 0xFE;
-        buf_r[2] = buf_r[2]*3.6; // converting m/s to Km/h
+//        buf_r[2] = buf_r[2]*3.6; // converting m/s to Km/h
         rcvd_msg_flag = 1;  // msg rcvd. chaeck if any action needed
 
     }
