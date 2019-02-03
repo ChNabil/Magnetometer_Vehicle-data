@@ -56,8 +56,8 @@ char i_acclmtr;
 char addr_tx[5];
 char addr_rx[5];
 //char addr_rx3[5];
-char buf_s[6];//sent msg 6 bits. 1.sender add. 2.Road no. 3.Speed. 4.Lane no. 5.Ice condition 6. Warning
-char buf_r[6];//rcvd msg 6 bits. 1.sender add. 2.Road no. 3.Speed. 4.Lane no. 5.Ice condition 6. Warning
+char buf_s[13];//sent msg 13 Bytes. See "Communication V2I I2X.docx" for details
+char buf_r[13];//rcvd msg 13 Bytes. See "Communication V2I I2X.docx" for details
 char sender_add = 1;
 char road_no = 1;
 char rcvd_msg_flag;
@@ -275,6 +275,7 @@ void main()
 //          if(speed > 0) // sends message whenever detects vehicle
 //          {
               // for radio start
+          /* ignoring for demonstration
               buf_s[0] = sender_add;
               buf_s[1] = road_no;
               buf_s[2] = (int)(speed);    // sending speed
@@ -295,7 +296,27 @@ void main()
               }
               else
                   buf_s[5] = 0;
+    */
+          if(speed > speed_th)
+                        {
+                            P1OUT |= BIT0;    // warning sign on, will remain on until another car detected
+                        }
+          // for demonstration only
+          buf_s[0] = 1; // intersection add 0, sender add 1
+          buf_s[1] = 0x14;  // road number 1, total road at intersection 4
+          buf_s[2] = 0; // reserved
+          buf_s[3] = 0x32;  // speed 50Mph
+          buf_s[4] = 0x52;  // lane 2, length 4m, class 2
+          buf_s[5] = 0;  // reserved
+          buf_s[6] = 0; // vehicle will send this
+          buf_s[7] = 0; // vehicle will send this
+          buf_s[8] = 0; // vehicle will send this
+          buf_s[9] = 0x90;  // warning speeding, low visibility
+          buf_s[10] = 0;    // reserved
+          buf_s[11] = 0;    // temp ID
+          buf_s[12] = 0x09; // temp ID
 
+          //end
               send_msg();
               activate_rx_mode();   // after sending msg, keep radio in rx mode and keep checking for rcvd msg until a new car is detected
 //          }                       // will only go to tx mode when a new car is detected or a msg is rcvd (dpndng on the msg)
@@ -760,7 +781,7 @@ void radio_setup(){
       rf_speed_power     = RF24_SPEED_1MBPS | RF24_POWER_0DBM;
       rf_channel         = 120;
       msprf24_init();  // All RX pipes closed by default
-      msprf24_set_pipe_packetsize(0, 6);
+      msprf24_set_pipe_packetsize(0, 13);
 //          msprf24_open_pipe(0, 0);  // Open pipe#0 with Enhanced ShockBurst enabled for receiving Auto-ACKs
               // Note: Pipe#0 is hardcoded in the transceiver hardware as the designated "pipe" for a TX node to receive
               // auto-ACKs.  This does not have to match the pipe# used on the RX side.
@@ -781,7 +802,7 @@ void radio_setup(){
 }
 
 void send_msg(){
-    w_tx_payload(6, buf_s);
+    w_tx_payload(13, buf_s);
             msprf24_activate_tx();
             LPM0;
 
@@ -819,7 +840,7 @@ void rcv_msg(){
         msprf24_get_irq_reason();
     }
     if (rf_irq & RF24_IRQ_RX || msprf24_rx_pending()) {
-        r_rx_payload(6, buf_r);
+        r_rx_payload(13, buf_r);
         msprf24_irq_clear(RF24_IRQ_RX);
 //        P1OUT ^= 0x01;
         //user = 0xFE;

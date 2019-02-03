@@ -6,8 +6,8 @@
     uint8_t addr_rx[5];
 //    uint8_t addr_rx3[5];
     uint8_t addr_tx[5];
-    uint8_t buf_r[6]; //rcvd msg. 6 bits. 1.sender add. 2.Road no. 3.Speed. 4.Lane no. 5.Ice condition 6.Warning
-    uint8_t buf_s[6]; //sent msg. 6 bits. 1.sender add. 2.Road no. 3.Speed. 4.Lane no. 5.Ice condition 6.Warning
+    uint8_t buf_r[13]; //rcvd msg 13 Bytes. See "Communication V2I I2X.docx" for details
+    uint8_t buf_s[13]; //sent msg 13 Bytes. See "Communication V2I I2X.docx" for details
     char sender_add, road_no, rcvd_msg_flag;
 
 volatile unsigned int user;
@@ -41,19 +41,22 @@ int p;
         rcv_msg();
         if(rcvd_msg_flag == 1)   // new msg rcvd. see what action rqrd
         {
-            if(buf_r[0] != 1 && buf_r[0] != 5)  // ignoring msg from RSU1 and vehicle 1 since we're assuming they are out of range from vehicle2
-            {
-                temp = 1;   // display msg here
-                temp = 1;   // display msg here
-            }
-        if(buf_r[0] == buf_r[1] && buf_r[1] == road_no)  //when car rcvd a msg, only sent back msg if rcvd msg was sent by the RSU
-        {                                                //of the same road(buf_r[0]) that the car is on and also the msg was for the same road(buf_r[1])
-            buf_s[0] = sender_add;                               // sender address and road no is changed. rest of the msg is same since the car dont have any new info for now
-            buf_s[1] = road_no;
+  // display msg. 1. type 0 rcvd, 2. type 1 sent 3. type 2 rcvd 4. type 3 sent 5. type 3 rcvd
+        if(buf_r[2] == 0)  // if message type is 0
+        {
+            buf_s[0] = sender_add;
+            buf_s[1] = buf_r[1];
             buf_s[2] = buf_r[2];
             buf_s[3] = buf_r[3];
             buf_s[4] = buf_r[4];
             buf_s[5] = buf_r[5];
+            buf_s[6] = 0x58;    // length 5m, class 2
+            buf_s[7] = 0x02;    // weight 2 tons
+            buf_s[8] = 0;   // reserved
+            buf_s[9] = buf_r[9];
+            buf_s[10] = 0x40;   // warning: damaged road
+            buf_s[11] = buf_r[11];
+            buf_s[12] = buf_r[12];
             for(p=0;p<30000;p++);
             send_msg();
             activate_rx_mode(); // going back to rx mode after sending msg
@@ -69,7 +72,7 @@ void rcv_msg(){
         msprf24_get_irq_reason();
     }
     if (rf_irq & RF24_IRQ_RX || msprf24_rx_pending()) {
-        r_rx_payload(6, buf_r);
+        r_rx_payload(13, buf_r);
         msprf24_irq_clear(RF24_IRQ_RX);
 //        P1OUT ^= 0x01;
         //user = 0xFE;
@@ -88,7 +91,7 @@ void radio_setup(){
     rf_channel         = 120;
 
     msprf24_init();
-    msprf24_set_pipe_packetsize(0, 6);
+    msprf24_set_pipe_packetsize(0, 13);
     msprf24_open_pipe(0, 0);  // Open pipe#0 with Enhanced ShockBurst
 //    msprf24_open_pipe(1, 0);
 
@@ -113,7 +116,7 @@ void activate_rx_mode(){
 }
 
 void send_msg(){
-    w_tx_payload(6, buf_s);
+    w_tx_payload(13, buf_s);
             msprf24_activate_tx();
             LPM0;
 
