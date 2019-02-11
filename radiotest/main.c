@@ -56,8 +56,8 @@ char i_acclmtr;
 char addr_tx[5];
 char addr_rx[5];
 //char addr_rx3[5];
-char buf_s[13];//sent msg 13 Bytes. See "Communication V2I I2X.docx" for details
-char buf_r[13];//rcvd msg 13 Bytes. See "Communication V2I I2X.docx" for details
+char buf_s[14];//sent msg 14 Bytes. See "Communication V2I I2X.docx" for details
+char buf_r[14];//rcvd msg 14 Bytes. See "Communication V2I I2X.docx" for details
 char sender_add = 1;
 char road_no = 1;
 char rcvd_msg_flag;
@@ -114,9 +114,23 @@ void main()
       P8OUT ^= BIT1;    // to check sampling fr
 
       rcv_msg();    // keep checking for rcvd msg.  take action when msg rcvd
-//      if(rcvd_msg_flag == 1)  // msg rcvd. see if any action needed
+      if(rcvd_msg_flag == 1)  // msg rcvd. see if any action needed
+      {
+          if(buf_r[2] == 64)    // type 1 msg rcvd
+          {
+              buf_s[2] = 128;   // will send type 2 msg
+              buf_s[6] = buf_r[6];  // copy info rcvd from vhcl to the msg to be sent
+              buf_s[7] = buf_r[7];  // copy info rcvd from vhcl to the msg to be sent
+              buf_s[8] = buf_r[8];  // copy info rcvd from vhcl to the msg to be sent
+              buf_s[10] = buf_r[10];    // copy info rcvd from vhcl to the msg to be sent
+              buf_s[11] = buf_r[11];    // copy the random ID vehicle sent to combine with the ID RSU sent in msg 0
+              send_msg();
+              activate_rx_mode();
+          }
+          rcvd_msg_flag = 0;
+      }
 
-      //    1 set of data is received for 2 magnatometer sensors
+      //    1 set of data is received for 2 magnetometer sensors
       x1 = (RXData_s1[0]*256)+RXData_s1[1];
       y1 = (RXData_s1[2]*256)+RXData_s1[3];
       z1 = (RXData_s1[4]*256)+RXData_s1[5];
@@ -313,8 +327,9 @@ void main()
           buf_s[8] = 0; // vehicle will send this
           buf_s[9] = 0x90;  // warning speeding, low visibility
           buf_s[10] = 0;    // reserved
-          buf_s[11] = 0;    // temp ID
-          buf_s[12] = 0x09; // temp ID
+          buf_s[11] = 0;    // temp ID, will rcv from vchl in type 1 msg
+          buf_s[12] = 0;    // temp ID
+          buf_s[13] = 0x09; // temp ID
 
           //end
               send_msg();
@@ -781,7 +796,7 @@ void radio_setup(){
       rf_speed_power     = RF24_SPEED_1MBPS | RF24_POWER_0DBM;
       rf_channel         = 120;
       msprf24_init();  // All RX pipes closed by default
-      msprf24_set_pipe_packetsize(0, 13);
+      msprf24_set_pipe_packetsize(0, 14);
 //          msprf24_open_pipe(0, 0);  // Open pipe#0 with Enhanced ShockBurst enabled for receiving Auto-ACKs
               // Note: Pipe#0 is hardcoded in the transceiver hardware as the designated "pipe" for a TX node to receive
               // auto-ACKs.  This does not have to match the pipe# used on the RX side.
@@ -802,7 +817,7 @@ void radio_setup(){
 }
 
 void send_msg(){
-    w_tx_payload(13, buf_s);
+    w_tx_payload(14, buf_s);
             msprf24_activate_tx();
             LPM0;
 
@@ -840,7 +855,7 @@ void rcv_msg(){
         msprf24_get_irq_reason();
     }
     if (rf_irq & RF24_IRQ_RX || msprf24_rx_pending()) {
-        r_rx_payload(13, buf_r);
+        r_rx_payload(14, buf_r);
         msprf24_irq_clear(RF24_IRQ_RX);
 //        P1OUT ^= 0x01;
         //user = 0xFE;

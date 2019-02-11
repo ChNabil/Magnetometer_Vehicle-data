@@ -14,10 +14,10 @@ volatile unsigned int user;
 char addr_tx[5];
 char addr_rx[5];
 //char addr_rx3[5];
-char buf_s[6];//sent msg 6 bits. 1.sender add. 2.Road no. 3.Speed. 4.Lane no. 5.Ice condition 6. Warning
-char buf_r[6];//rcvd msg 6 bits. 1.sender add. 2.Road no. 3.Speed. 4.Lane no. 5.Ice condition 6. Warning
-char sender_add = 3;
+char buf_r[14]; //rcvd msg 14 Bytes. See "Communication V2I I2X.docx" for details
+char buf_s[14]; //sent msg 14 Bytes. See "Communication V2I I2X.docx" for detailschar sender_add = 3;
 char road_no = 3;
+char sender_add = 3;
 char rcvd_msg_flag, send_msg_flag;
 int p;
 
@@ -48,18 +48,15 @@ void main()
       }
       rcv_msg();    // keep checking for rcvd msg.  take action when msg rcvd
       if(rcvd_msg_flag == 1)  // msg rcvd. see if any action needed
-          if(buf_r[0] == buf_r[1] && buf_r[5] != 0) // if warning, and rcvd msg is original msg, not propagated msg, then propgt the msg
+          if(buf_r[2] == 192) // if rcvd msg is type 3, send back the msg with own sender address
           {
               buf_s[0] = sender_add;
-              buf_s[1] = buf_r[1];
-              buf_s[2] = buf_r[2];
-              buf_s[3] = buf_r[3];
-              buf_s[4] = buf_r[4];
-              buf_s[5] = buf_r[5];
-//              for(p=0;p<30000;p++);
+              for(p=1;p<14;p++)
+                  buf_s[p] = buf_r[p];
               send_msg();
               activate_rx_mode();
           }
+      rcvd_msg_flag = 0;
 }
 }
 
@@ -86,7 +83,7 @@ void radio_setup(){
       rf_speed_power     = RF24_SPEED_1MBPS | RF24_POWER_0DBM;
       rf_channel         = 120;
       msprf24_init();  // All RX pipes closed by default
-      msprf24_set_pipe_packetsize(0, 6);
+      msprf24_set_pipe_packetsize(0, 14);
 //          msprf24_open_pipe(0, 0);  // Open pipe#0 with Enhanced ShockBurst enabled for receiving Auto-ACKs
               // Note: Pipe#0 is hardcoded in the transceiver hardware as the designated "pipe" for a TX node to receive
               // auto-ACKs.  This does not have to match the pipe# used on the RX side.
@@ -107,7 +104,7 @@ void radio_setup(){
 }
 
 void send_msg(){
-    w_tx_payload(6, buf_s);
+    w_tx_payload(14, buf_s);
             msprf24_activate_tx();
             LPM0;
 
@@ -145,7 +142,7 @@ void rcv_msg(){
         msprf24_get_irq_reason();
     }
     if (rf_irq & RF24_IRQ_RX || msprf24_rx_pending()) {
-        r_rx_payload(6, buf_r);
+        r_rx_payload(14, buf_r);
         msprf24_irq_clear(RF24_IRQ_RX);
 //        P1OUT ^= 0x01;
         //user = 0xFE;
