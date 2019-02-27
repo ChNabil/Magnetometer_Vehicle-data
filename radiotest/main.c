@@ -61,6 +61,7 @@ char buf_r[14];//rcvd msg 14 Bytes. See "Communication V2I I2X.docx" for details
 char sender_add = 1;
 char road_no = 1;
 char rcvd_msg_flag;
+int temp_id;    // temp ID, will increase this every time a vehicle is detected
 
 void main()
 {
@@ -76,7 +77,7 @@ void main()
   rcvd_msg_flag = 0; // no msg rcvd yet
 
   dist_betwn_snsrs = 0.17; // in m
-  sampling_rate = 203;
+  sampling_rate = 200;
   ice_present_flag = 0; // if there's ice, flag set to 1
   length_th = 4.1;  // 4.1m, length of compact car according us epa
   speed_th = 0.6; // 0.6 m/s, for demonstration, will be changed for later
@@ -105,6 +106,8 @@ void main()
 
   P4DIR |= BIT7;    // p4.7 led2 / indicates ice
   P4OUT &= ~BIT7;   // no ice by default
+
+  temp_id = 8968; // temp ID, will increase this every time a vehicle is detected
 
   while(1)
   {
@@ -261,7 +264,6 @@ void main()
           }
 // get wrong index sometimes, need to check [fixed]
 
-
           speed = dist_betwn_snsrs/((highest_point_loc_2 - highest_point_loc_1)/sampling_rate);   // speed in m/s
           speed = speed * 3.6;  // in Km/h
 
@@ -273,7 +275,7 @@ void main()
               if(mag1_1000[count9]<10 && mag1_1000[count9+1]<10)
               {
                   length = (count9 - 89)/sampling_rate;    //89+20=109, 89 data before detecting car, 20 for moving avg filter(not using)
-                  length = length * speed;  //   length in m
+                  length = (length * speed)/3.6;  //   length in m
                   count9 = 1000;    // stopping the for loop right here
               }
           }
@@ -319,7 +321,8 @@ void main()
           buf_s[0] = 1; // intersection add 0, sender add 1
           buf_s[1] = 0x14;  // road number 1, total road at intersection 4
           buf_s[2] = 0; // reserved
-          buf_s[3] = 0x32;  // speed 50Mph
+          buf_s[3] = speed; // sending the calculated
+//          buf_s[3] = 0x32;  // speed 50Mph
           buf_s[4] = 0x52;  // lane 2, length 4m, class 2
           buf_s[5] = 0;  // reserved
           buf_s[6] = 0; // vehicle will send this
@@ -328,8 +331,9 @@ void main()
           buf_s[9] = 0x90;  // warning speeding, low visibility
           buf_s[10] = 0;    // reserved
           buf_s[11] = 0;    // temp ID, will rcv from vchl in type 1 msg
-          buf_s[12] = 0;    // temp ID
-          buf_s[13] = 0x09; // temp ID
+          temp_id++;    // temp ID, will increase this every time a vehicle is detected
+          buf_s[12] = temp_id/256;    // temp ID
+          buf_s[13] = temp_id%256; // temp ID
 
           //end
               send_msg();
