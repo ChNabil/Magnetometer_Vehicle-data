@@ -280,10 +280,10 @@ void main()
               }
           }
 
-          speed_th = 0.6; // speed threshold reset fpr each vehicle
+          speed_th = 4; // speed threshold reset fpr each vehicle
 
           if(ice_present_flag == 1) // if ice present, threshold speed reduced by 50%
-              speed_th = 0.3; // if write speed_th/2, will divide by 2 in every loop
+              speed_th = 2; // if write speed_th/2, will divide by 2 in every loop
 // next speed threshold calculation showing error. need to check
           //if(length > length_th)    // if length of the car is longer than avg
               //speed_th = speed_th - (speed_th * ((int(length - length_th)) * 0.1));   // 10% reduction in speed threshold for each meter increase in length from avg length
@@ -321,14 +321,16 @@ void main()
           buf_s[0] = 1; // intersection add 0, sender add 1
           buf_s[1] = 0x14;  // road number 1, total road at intersection 4
           buf_s[2] = 0; // reserved
-          buf_s[3] = speed; // sending the calculated
+          buf_s[3] = speed; // sending the calculated speed
 //          buf_s[3] = 0x32;  // speed 50Mph
           buf_s[4] = 0x52;  // lane 2, length 4m, class 2
           buf_s[5] = 0;  // reserved
           buf_s[6] = 0; // vehicle will send this
           buf_s[7] = 0; // vehicle will send this
           buf_s[8] = 0; // vehicle will send this
-          buf_s[9] = 0x90;  // warning speeding, low visibility
+          buf_s[9] = 0x10;  // warning low visibility, no speeding warning
+          if (speed > speed_th)
+              buf_s[9] = buf_s[9] | 0x80;   // setting speeding warning bit if applicable
           buf_s[10] = 0;    // reserved
           buf_s[11] = 0;    // temp ID, will rcv from vchl in type 1 msg
           temp_id++;    // temp ID, will increase this every time a vehicle is detected

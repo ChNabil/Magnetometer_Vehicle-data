@@ -10,7 +10,7 @@
     uint8_t buf_r[14]; //rcvd msg 14 Bytes. See "Communication V2I I2X.docx" for details
     uint8_t buf_s[14]; //sent msg 14 Bytes. See "Communication V2I I2X.docx" for details
     char sender_add, road_no, rcvd_msg_flag;
-    char msg[223]="Intersection-0 Sender-RSU1    Road-1 TotalRoads-4 MsgType-0 Speed-50Kph Lane-2 Length-4m Class-2 Length-   Class-  Weight-      Warnings: Speeding-Y Water-N Ice-N LowVisibility-Y EmergencyVechiel-N DamagedRoad-N ID-0x000000";
+    char msg[223]="Intersection-0 Sender-RSU1    Road-1 TotalRoads-4 MsgType-0 Speed-50Kph Lane-2 Length-4m Class-2 Length-   Class-  Weight-      Warnings: Speeding-  Water-N Ice-N LowVisibility-Y EmergencyVechiel-N DamagedRoad-N ID-0x000000";
 char random_ID_vchl;
 
 volatile unsigned int user;
@@ -230,6 +230,10 @@ void createmsg0(){
     msg[124] = ' ';
     msg[125] = ' ';
     msg[126] = ' ';
+    if((buf_r[9] & 0x80) == 0x80)  // checking speeding warning bit in rcvd msg
+        msg[147] = 'Y';
+    else
+        msg[147] ='N';
     msg[210] = 'N'; // detected by vehicle. buf_s[10]&64 = 64
     msg[217] = '0';
     msg[218] = '0';
