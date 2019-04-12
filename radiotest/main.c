@@ -25,10 +25,10 @@ void rcv_msg();
 volatile unsigned int user;
 // for radio end
 
-volatile unsigned char RXData_s1[6];  // received 6 bytes from sensor 1
-volatile unsigned char RXData_s2[6];  // received 6 bytes from sensor 2
-volatile unsigned int distance;  // distance in cm
-int temp;
+unsigned char RXData_s1[6];  // received 6 bytes from sensor 1
+unsigned char RXData_s2[6];  // received 6 bytes from sensor 2
+unsigned int distance;  // distance in cm
+//int temp;
 unsigned char *PRXData_s1; // pointer for sensor 1 data
 unsigned char *PRXData_s2; // pointer for sensor 2 data
 unsigned char RXByteCtr;  // same for both sensors
@@ -38,18 +38,24 @@ char UART_byte; // number of byte to be sent
 char UART_sensor_flag;  // which sensor is sending data via uart
 char j,j1; // for each 100 magnetometer data, 1 distance will be measured. cause magnetometer data fr is 2000Hz, ultrasonic data fr 20Hz
 int sensor_select; // received data from which sensor
-volatile unsigned int i;
+unsigned int i;
+int size;
+int xcorr_result[];
+int temp = 0;
+int ii, lag;
+int peak = 0;
+int index = 0;
 //volatile unsigned int a,b,c,d,e,f,g,h,k1,k2;  // for debugging
 volatile int x1, x2, y1, y2, z1, z2, mag1, mag2, mag_th_1, mag_th_2, count1, count2, count3, count4, count5, count6, count7, count8, count9, count10, count11, count12, count13, temp_data_1, temp_data_2, data_check_1, data_check_2;
 int mag_rcnt_1[100];
 int mag_rcnt_2[100];
-volatile int mag1_1000[1000];
-volatile int mag2_1000[1000];
-volatile float speed, length, speed_th, length_th, dist_betwn_snsrs, sampling_rate;
-volatile int store_1000_flag, highest_point_loc_1, highest_point_loc_2, ice_present_flag;
-volatile unsigned char acclmtr_data[2];  // received 2 bytes from acclmtr z axis
+int mag1_1000[1000];
+int mag2_1000[1000];
+float speed, length, speed_th, length_th, dist_betwn_snsrs, sampling_rate;
+int store_1000_flag, highest_point_loc_1, highest_point_loc_2, ice_present_flag;
+unsigned char acclmtr_data[2];  // received 2 bytes from acclmtr z axis
 unsigned char *Pacclmtr_data; // pointer for acclmtr data
-volatile int z_acclmtr[1000];
+int z_acclmtr[1000];
 char acclmtr_config_flag;
 char i_acclmtr;
 // for radio start
@@ -235,17 +241,17 @@ void main()
 //              mag2_1000[count6] = temp_data_2/20;
 //          }
 
-          // removing mag threshold so that squaring wont cause any prob, works like removing mean but dont have to calculate mean
+          // removing mag threshold for cross-correlation
           for(count8=0;count8<1000;count8++)
           {
               mag1_1000[count8] = mag1_1000[count8] - mag_th_1;
               mag2_1000[count8] = mag2_1000[count8] - mag_th_2;
-              mag1_1000[count8] = mag1_1000[count8] * mag1_1000[count8];
-              mag2_1000[count8] = mag2_1000[count8] * mag2_1000[count8];
+            //  mag1_1000[count8] = mag1_1000[count8] * mag1_1000[count8];
+            //  mag2_1000[count8] = mag2_1000[count8] * mag2_1000[count8];
           }
 
           // finding time difference between 2 sensors data
-          data_check_1 = mag1_1000[0];
+    /*      data_check_1 = mag1_1000[0];
           highest_point_loc_1 = 0;
           data_check_2 = mag2_1000[0];
           highest_point_loc_2 = 0;
@@ -261,10 +267,29 @@ void main()
                   data_check_2 = mag2_1000[count7];
                   highest_point_loc_2 = count7;
               }
+          }*/ // get wrong index sometimes, need to check [fixed]
+          // cross correlation to find time difference between 2 sensors
+          size = 500;
+          for(lag=0; lag<size; lag++)
+          {
+            temp = 0;
+            for(ii=0; ii<size-lag; ii++)
+            {
+              temp = temp + (mag1_1000[ii] * mag2_1000[ii+lag]);
+            }
+            xcorr_result[lag] = temp;
           }
-// get wrong index sometimes, need to check [fixed]
+          peak = xcorr_result[0];
+          for(ii=0; ii<size; ii++)
+          {
+            if(xcorr_result[ii] >= peak)
+            {
+              peak = xcorr_result[ii];
+              index = ii;
+            }
+          }
 
-          speed = dist_betwn_snsrs/((highest_point_loc_2 - highest_point_loc_1)/sampling_rate);   // speed in m/s
+          speed = dist_betwn_snsrs/(index/sampling_rate);   // speed in m/s
           speed = speed * 3.6;  // in Km/h
 
 // finding length. We know max point is "highest_point_loc_1", check when the mag becomes same as threshold after that.
@@ -872,4 +897,3 @@ void rcv_msg(){
     else
         rcvd_msg_flag = 0;  // indicating no msg rcvd
 }
-
