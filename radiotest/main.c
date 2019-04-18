@@ -78,6 +78,9 @@ void main()
   P8DIR |= BIT1;
   user = 0xFE;  // for radio
 
+  P6DIR |= BIT5;    // for checking processing time
+  P6OUT &= ~BIT5;
+
   radio_setup();
   activate_rx_mode();   // start radio in rx mode, change to tx mode when needed
   rcvd_msg_flag = 0; // no msg rcvd yet
@@ -166,7 +169,7 @@ void main()
 
       else
       {
-          for (count2=0;count2<99;count2++) // shifting 99 data points to the left to make room for most recent data at 100th place
+          for (count2=90;count2<99;count2++) // shifting 99 data points to the left to make room for most recent data at 100th place
           {
               mag_rcnt_1[count2] = mag_rcnt_1[count2+1];
               mag_rcnt_2[count2] = mag_rcnt_2[count2+1];
@@ -197,7 +200,7 @@ void main()
               }
       }
 
-      if (store_1000_flag == 1 && count4<1000)
+      if (store_1000_flag == 1 && count4<324)
       {
           mag1_1000[count4] = mag1;
           mag2_1000[count4] = mag2;
@@ -205,15 +208,28 @@ void main()
           //for +-16 g range, RX_data/3=accelaration in m/s^2. (RX_data/32)*9.8=RX_data/3.
           z_acclmtr[count4] = ((acclmtr_data[1]*256)+acclmtr_data[0])/3; // acclmtr data z axis
           count4++;
+
+      // checking when 2nd magnetometer detects the vehicle
+  count3 = 0; // to check if last 10 data exceed threshold
+          for (count11=0;count11<10;count11++)
+      {
+          if((mag2_1000[count4-count11]-mag_th_2) > 3 || (mag2_1000[count4-count11]-mag_th_2) < -3)
+              count3++;
+      }
+      if (count3 == 10)
+      {
+        index = count4-100;// bcz 100th sample is where mag1 detected the vehicles
+      }
       }
 
-      if(count4 == 1000 && store_1000_flag == 1)    // 1000 data stored, time for calculation
+      if(count4 == 324 && store_1000_flag == 1)    // 1000 data stored, time for calculation
       {
+          P6OUT |= BIT5;
           P1OUT &= ~BIT0;   // warning sign off
           store_1000_flag = 0; // stop storing data and start calculations. will start checking recent 10 mag after calculations are done
 
 // median filter for removing the spikes
-          for(count10=1;count10<999;count10++)
+          for(count10=1;count10<323;count10++)
           {
               if(mag1_1000[count10] > mag1_1000[count10-1] && mag1_1000[count10] > mag1_1000[count10+1])
                   mag1_1000[count10] = mag1_1000[count10+1];
@@ -242,7 +258,7 @@ void main()
 //          }
 
           // removing mag threshold for cross-correlation
-          for(count8=0;count8<1000;count8++)
+          for(count8=0;count8<324;count8++)
           {
               mag1_1000[count8] = mag1_1000[count8] - mag_th_1;
               mag2_1000[count8] = mag2_1000[count8] - mag_th_2;
@@ -269,7 +285,8 @@ void main()
               }
           }*/ // get wrong index sometimes, need to check [fixed]
           // cross correlation to find time difference between 2 sensors
-          size = 500;
+          size = 324;
+/* takes too much time (208.5 ms). try another method
           for(lag=0; lag<size; lag++)
           {
             temp = 0;
@@ -288,6 +305,7 @@ void main()
               index = ii;
             }
           }
+          */
 
           speed = dist_betwn_snsrs/(index/sampling_rate);   // speed in m/s
           speed = speed * 3.6;  // in Km/h
@@ -295,13 +313,13 @@ void main()
 // finding length. We know max point is "highest_point_loc_1", check when the mag becomes same as threshold after that.
 // since we are removing threshold, need to find when mag becomes close to 0. checking 2 consecutive samples to be sure.
 // stopping the for loop when we find that point
-          for(count9=highest_point_loc_1;count9<999;count9++)
+          for(count9=highest_point_loc_1;count9<323;count9++)
           {
               if(mag1_1000[count9]<10 && mag1_1000[count9+1]<10)
               {
                   length = (count9 - 89)/sampling_rate;    //89+20=109, 89 data before detecting car, 20 for moving avg filter(not using)
                   length = (length * speed)/3.6;  //   length in m
-                  count9 = 1000;    // stopping the for loop right here
+                  count9 = 324;    // stopping the for loop right here
               }
           }
 
@@ -342,6 +360,7 @@ void main()
                         {
                             P1OUT |= BIT0;    // warning sign on, will remain on until another car detected
                         }
+          P6OUT &= ~BIT5;
           // for demonstration only
           buf_s[0] = 1; // intersection add 0, sender add 1
           buf_s[1] = 0x14;  // road number 1, total road at intersection 4
