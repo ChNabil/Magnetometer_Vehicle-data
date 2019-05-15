@@ -38,20 +38,22 @@ char UART_byte; // number of byte to be sent
 char UART_sensor_flag;  // which sensor is sending data via uart
 char j,j1; // for each 100 magnetometer data, 1 distance will be measured. cause magnetometer data fr is 2000Hz, ultrasonic data fr 20Hz
 int sensor_select; // received data from which sensor
-unsigned int i;
+unsigned int i, length_int, speed_int;
 int size;
-int xcorr_result[];
-int temp = 0;
+long xcorr_result;
+long temp = 0;
+char mag2_dtct_flag;
 int ii, lag;
 int peak = 0;
 int index = 0;
+int indexx = 0;
 //volatile unsigned int a,b,c,d,e,f,g,h,k1,k2;  // for debugging
 volatile int x1, x2, y1, y2, z1, z2, mag1, mag2, mag_th_1, mag_th_2, count1, count2, count3, count4, count5, count6, count7, count8, count9, count10, count11, count12, count13, temp_data_1, temp_data_2, data_check_1, data_check_2;
 int mag_rcnt_1[100];
 int mag_rcnt_2[100];
 int mag1_1000[1000];
 int mag2_1000[1000];
-float speed, length, speed_th, length_th, dist_betwn_snsrs, sampling_rate;
+float speed, speed1, length, speed_th, length_th, dist_betwn_snsrs, sampling_rate;
 int store_1000_flag, highest_point_loc_1, highest_point_loc_2, ice_present_flag;
 unsigned char acclmtr_data[2];  // received 2 bytes from acclmtr z axis
 unsigned char *Pacclmtr_data; // pointer for acclmtr data
@@ -85,8 +87,8 @@ void main()
   activate_rx_mode();   // start radio in rx mode, change to tx mode when needed
   rcvd_msg_flag = 0; // no msg rcvd yet
 
-  dist_betwn_snsrs = 0.17; // in m
-  sampling_rate = 200;
+  dist_betwn_snsrs = 0.23; // in m
+  sampling_rate = 200;  // increased from 200 after stopped sending raw data through UART
   ice_present_flag = 0; // if there's ice, flag set to 1
   length_th = 4.1;  // 4.1m, length of compact car according us epa
   speed_th = 0.6; // 0.6 m/s, for demonstration, will be changed for later
@@ -117,6 +119,7 @@ void main()
   P4OUT &= ~BIT7;   // no ice by default
 
   temp_id = 8968; // temp ID, will increase this every time a vehicle is detected
+  mag2_dtct_flag = 0;
 
   while(1)
   {
@@ -157,13 +160,21 @@ void main()
           {
           mag_rcnt_1[count1] = mag1; // store 100 recent mag
           mag_rcnt_2[count1] = mag2;
-          count1++;
+
+          if (count1 != 0)  // sometimes first data is garbage, check why
+          {
           mag_th_1 += mag1;
           mag_th_2 += mag2;
+          }
+          count1++;
           if(count1 == 100) // calculating threshold for first 100 data
                 {
-                    mag_th_1 = mag_th_1/100;
-                    mag_th_2 = mag_th_2/100;
+              mag_rcnt_1[0] = mag_rcnt_1[1]; // sometimes first data is garbage, check why
+              mag_rcnt_2[0] = mag_rcnt_2[1]; // sometimes first data is garbage, check why
+              mag_th_1 = mag_th_1;
+              mag_th_2 = mag_th_2;
+                    mag_th_1 = mag_th_1/99;
+                    mag_th_2 = mag_th_2/99;
                 }
           }
 
@@ -181,12 +192,13 @@ void main()
               {
               for (count11=90;count11<100;count11++)
           {
-              if((mag_rcnt_1[count11]-mag_th_1) > 3 || (mag_rcnt_1[count11]-mag_th_1) < -3)
+              if((mag_rcnt_1[count11]-mag_th_1) > 3)
                   count3++;
           }
           if (count3 == 10)
           {
               store_1000_flag = 1;
+              mag2_dtct_flag = 1;
               count4 = 100;
               for(count12=0;count12<100;count12++)  // storing first 100 data of 1000
               {
@@ -200,36 +212,40 @@ void main()
               }
       }
 
-      if (store_1000_flag == 1 && count4<324)
+      if (store_1000_flag == 1 && count4<1000)
       {
           mag1_1000[count4] = mag1;
           mag2_1000[count4] = mag2;
           //only storing acclmtr data when vehicle is detected by mgntmtr.
           //for +-16 g range, RX_data/3=accelaration in m/s^2. (RX_data/32)*9.8=RX_data/3.
           z_acclmtr[count4] = ((acclmtr_data[1]*256)+acclmtr_data[0])/3; // acclmtr data z axis
-          count4++;
 
       // checking when 2nd magnetometer detects the vehicle
-  count3 = 0; // to check if last 10 data exceed threshold
+
+  if(mag2_dtct_flag == 1)   // stop checking once vehicle dtctd
+  {
+      count3 = 0; // to check if last 10 data exceed threshold
           for (count11=0;count11<10;count11++)
       {
-          if((mag2_1000[count4-count11]-mag_th_2) > 3 || (mag2_1000[count4-count11]-mag_th_2) < -3)
+          if((mag2_1000[count4-count11]-mag_th_2) > 3)
               count3++;
       }
       if (count3 == 10)
       {
-        index = count4-100;// bcz 100th sample is where mag1 detected the vehicles
+          mag2_dtct_flag = 0;   // stop checking, already detected the vehicle
+        indexx = count4-99;// bcz 100th sample is where mag1 detected the vehicles
       }
+   }
+  count4++;
       }
-
-      if(count4 == 324 && store_1000_flag == 1)    // 1000 data stored, time for calculation
+      if(count4 == 1000 && store_1000_flag == 1)    // 1000 data stored, time for calculation
       {
           P6OUT |= BIT5;
           P1OUT &= ~BIT0;   // warning sign off
           store_1000_flag = 0; // stop storing data and start calculations. will start checking recent 10 mag after calculations are done
 
 // median filter for removing the spikes
-          for(count10=1;count10<323;count10++)
+   /*       for(count10=1;count10<999;count10++)
           {
               if(mag1_1000[count10] > mag1_1000[count10-1] && mag1_1000[count10] > mag1_1000[count10+1])
                   mag1_1000[count10] = mag1_1000[count10+1];
@@ -241,7 +257,7 @@ void main()
               else if(mag2_1000[count10] < mag2_1000[count10-1] && mag2_1000[count10] < mag2_1000[count10+1])
                   mag2_1000[count10] = mag2_1000[count10+1];
           }
-
+*/
 //  moving avg filter. doesnt seem to be very useful
 
 //          for(count6=0;count6<981;count6++) // moving avg filter, only valid first 900 data
@@ -258,7 +274,7 @@ void main()
 //          }
 
           // removing mag threshold for cross-correlation
-          for(count8=0;count8<324;count8++)
+          for(count8=0;count8<1000;count8++)
           {
               mag1_1000[count8] = mag1_1000[count8] - mag_th_1;
               mag2_1000[count8] = mag2_1000[count8] - mag_th_2;
@@ -285,8 +301,9 @@ void main()
               }
           }*/ // get wrong index sometimes, need to check [fixed]
           // cross correlation to find time difference between 2 sensors
-          size = 324;
-/* takes too much time (208.5 ms). try another method
+          size = 1000;
+// takes too much time (208.5 ms). try another method
+          xcorr_result = 0;
           for(lag=0; lag<size; lag++)
           {
             temp = 0;
@@ -294,32 +311,41 @@ void main()
             {
               temp = temp + (mag1_1000[ii] * mag2_1000[ii+lag]);
             }
-            xcorr_result[lag] = temp;
+            if(temp >= xcorr_result)
+                        {
+                          xcorr_result = temp;
+                          index = lag;
+                        }
           }
-          peak = xcorr_result[0];
-          for(ii=0; ii<size; ii++)
-          {
-            if(xcorr_result[ii] >= peak)
-            {
-              peak = xcorr_result[ii];
-              index = ii;
-            }
-          }
-          */
+//          peak = xcorr_result[0];
+//          for(ii=0; ii<size; ii++)
+//          {
+//            if(xcorr_result[ii] >= peak)
+//            {
+//              peak = xcorr_result[ii];
+//              index = ii;
+//            }
+//          }
+          //
 
-          speed = dist_betwn_snsrs/(index/sampling_rate);   // speed in m/s
+          speed = dist_betwn_snsrs/(index/sampling_rate);   // speed in m/s (xcorr)
           speed = speed * 3.6;  // in Km/h
+          speed_int = speed;    // only using for UART checking, will remove in final sw
+
+          speed1 = dist_betwn_snsrs/(indexx/sampling_rate);   // speed in m/s (not xcorr)
+          speed1 = speed1 * 3.6;    // in Km/h
 
 // finding length. We know max point is "highest_point_loc_1", check when the mag becomes same as threshold after that.
 // since we are removing threshold, need to find when mag becomes close to 0. checking 2 consecutive samples to be sure.
 // stopping the for loop when we find that point
-          for(count9=highest_point_loc_1;count9<323;count9++)
+          for(count9=100;count9<997;count9++)
           {
-              if(mag1_1000[count9]<10 && mag1_1000[count9+1]<10)
+              if(mag1_1000[count9]<6 && mag1_1000[count9+1]<3 && mag1_1000[count9+2]<6)
               {
                   length = (count9 - 89)/sampling_rate;    //89+20=109, 89 data before detecting car, 20 for moving avg filter(not using)
                   length = (length * speed)/3.6;  //   length in m
-                  count9 = 324;    // stopping the for loop right here
+                  length_int = (length * 100);  //   length in cm, will comment out this line later
+                  count9 = 1000;    // stopping the for loop right here
               }
           }
 
@@ -386,6 +412,12 @@ void main()
               activate_rx_mode();   // after sending msg, keep radio in rx mode and keep checking for rcvd msg until a new car is detected
 //          }                       // will only go to tx mode when a new car is detected or a msg is rcvd (dpndng on the msg)
 
+/*
+              while (!(UCA1IFG&UCTXIFG));             // USCI_A1 TX buffer ready?
+              UCA1TXBUF = speed_int;
+              while (!(UCA1IFG&UCTXIFG));             // USCI_A1 TX buffer ready?
+  */            UCA1TXBUF = length_int;
+
       }
 
 
@@ -399,6 +431,8 @@ void main()
                 j = 0;
             }
 //      a=TA0R;
+      //    dont need to send raw data anymore
+
             UART_sensor_flag = 1;  // sensor 1 is sending data
             UART_byte = 0;  // for first datum from sensor 1
             //three_digit_flag = 1; // sending first digit
@@ -414,6 +448,7 @@ void main()
             //three_digit_flag = 1; // sending first digit
             UCA1IE |= UCTXIE; // Enable USCI_A1 TX interrupt
             LPM0;
+
 //            b=TA0R;
   }
 }
@@ -675,6 +710,8 @@ void __attribute__ ((interrupt(USCI_A1_VECTOR))) USCI_A1_ISR (void)
   case 0:break;
   case 2:break;
   case 4:
+      //    not sending raw data anymore
+
     if (UART_sensor_flag == 1){
         UCA1TXBUF = RXData_s1[UART_byte];
         UART_byte++;
@@ -700,7 +737,7 @@ void __attribute__ ((interrupt(USCI_A1_VECTOR))) USCI_A1_ISR (void)
            else if (UART_byte == 1)
            {
                 //UCA1TXBUF = distance - (256*((int)(distance/256)));
-               UCA1TXBUF = 0;
+               UCA1TXBUF = index;
                   //UCA1IE &= ~UCTXIE;
                   //LPM0_EXIT;
                 }
@@ -718,10 +755,12 @@ void __attribute__ ((interrupt(USCI_A1_VECTOR))) USCI_A1_ISR (void)
                           }
                 UART_byte++;
        }
+
   break;                             // Vector 4 - TXIFG
   default: break;
   }
 }
+
 
 // Port 1 interrupt service routine
 
