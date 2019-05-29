@@ -1,19 +1,19 @@
 fs = 200;  % sampling frequency
-dis_snsrs = .16; % distance between 2 sensors in m
+dis_snsrs = .5; % distance between 2 sensors in m
 
-x1 = xlsread('acclmtr_on_small_brdbrd_ground_200Hz_16Kmph_DodgeNeon',3,'A:A'); % reading x,y,z data for both sensors
+x1 = xlsread('capture0_32kmph',3,'A:A'); % reading x,y,z data for both sensors
 x1 = typecast(uint16(x1),'int16');  % converting data to int16 form uint16
-y1 = xlsread('acclmtr_on_small_brdbrd_ground_200Hz_16Kmph_DodgeNeon',3,'B:B');
+y1 = xlsread('capture0_32kmph',3,'B:B');
 y1 = typecast(uint16(y1),'int16');
-z1 = xlsread('acclmtr_on_small_brdbrd_ground_200Hz_16Kmph_DodgeNeon',3,'C:C');
+z1 = xlsread('capture0_32kmph',3,'C:C');
 z1 = typecast(uint16(z1),'int16');
-x2 = xlsread('acclmtr_on_small_brdbrd_ground_200Hz_16Kmph_DodgeNeon',3,'D:D');
+x2 = xlsread('capture0_32kmph',3,'D:D');
 x2 = typecast(uint16(x2),'int16');
-y2 = xlsread('acclmtr_on_small_brdbrd_ground_200Hz_16Kmph_DodgeNeon',3,'E:E');
+y2 = xlsread('capture0_32kmph',3,'E:E');
 y2 = typecast(uint16(y2),'int16');
-z2 = xlsread('acclmtr_on_small_brdbrd_ground_200Hz_16Kmph_DodgeNeon',3,'F:F');
+z2 = xlsread('capture0_32kmph',3,'F:F');
 z2 = typecast(uint16(z2),'int16');
-distance = xlsread('acclmtr_on_small_brdbrd_ground_200Hz_16Kmph_DodgeNeon',3,'G:G'); % in cm
+%distance = xlsread('capture0_32kmph',3,'G:G'); % in cm
 
 % converting sample number to sec, for plotting
 %t = 0:1/fs:(size(x1)/fs)-1/fs; 
@@ -177,7 +177,8 @@ lag_time = abs(lag(i))/fs;  % lag in samples/sampling fr. lagtime in sec
 
 qq=0;
 qq1=0;
-for(ttt=1:(length(mag1)-10))
+ll=length(mag1);
+for(ttt=1:ll-10)
     for(tttt=0:9)
          if (mag1(ttt+tttt)>3)
            qq=qq+1;
@@ -186,21 +187,21 @@ for(ttt=1:(length(mag1)-10))
            qq1=qq1+1;
          end
          if(qq==10)
-             zz1=ttt+tttt;
+             zz1=ttt;
          end
          if(qq1==10)
-             zz2=ttt+tttt;
+             zz2=ttt;
          end
     end
 end
     
-    lag_time1=(zz2-zz1)/fs;
+lag_time1=(zz2-zz1)/fs;
 speed = dis_snsrs/lag_time*3.6; % speed of vehicle in km/h
 speed1 = dis_snsrs/lag_time1*3.6; % speed of vehicle in km/h
 
 l=0;
 for(tt=1:length(mag1))
-    if mag1(tt)>3
+    if mag1(tt)>4 || mag1(tt)<-4
         l=l+1;
     end
 end
